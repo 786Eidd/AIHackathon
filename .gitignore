@@ -41,3 +41,6 @@ Thumbs.db
 
 # --- Docker ---
 *.log
+
+# Local Cowork delivery folder (not part of the project)
+Claude outputs/
