@@ -1,0 +1,54 @@
+# docker-compose.yml
+
+services:
+  download-models:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+    entrypoint: ["python", "scripts/download_models.py"]
+    profiles:
+      - setup
+
+  # The camera capture and analysis threads run inside this process so they
+  # can share a single copy of the models. There is deliberately no separate
+  # worker service: a second process would load the models again and start a
+  # duplicate set of capture threads per camera.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      APP_SERVICE: api
+      DOWNLOAD_MODELS: "false"
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
+    # Cameras are usually on the same LAN as the host. Uncomment to let the
+    # container reach RTSP devices directly without port mapping.
+    # network_mode: host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Model loading on first boot takes a while; do not mark unhealthy yet.
+      start_period: 120s
+    # Threads block on RTSP reads, so give the container room to shut them
+    # down cleanly and flush open events.
+    stop_grace_period: 40s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

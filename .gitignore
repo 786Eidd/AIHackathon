@@ -1,0 +1,43 @@
+# --- secrets / env ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+*credentials*.json
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# --- Node ---
+node_modules/
+dist/
+build/
+
+# --- Database / runtime state ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# --- Model weights / large binaries (fetch separately, don't commit) ---
+storage/models/*.pkl
+storage/models/*.pt
+storage/models/*.onnx
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+.vscode/
+.idea/
+
+# --- Docker ---
+*.log

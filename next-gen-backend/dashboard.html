@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NEXGEN Security &amp; Management</title>
+<style>
+  :root{
+    --navy:#1b1f4b; --navy2:#2a2f66; --red:#db4b41; --red-dark:#c53a30;
+    --purple:#7c6fef; --purple-bg:#efecff; --green:#1fae5d; --green-bg:#e7f8ee;
+    --pink-bg:#fdeaea; --pink-text:#db4b41; --grey-bg:#f4f5f9; --border:#e7e9f2;
+    --muted:#8890a6; --text:#1e2135; --white:#ffffff; --amber:#e0a020; --amber-bg:#fbf1de;
+    --radius:10px; --shadow:0 1px 3px rgba(27,31,75,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--grey-bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;}
+  button,input,select,textarea{font-family:inherit;}
+  code{background:#eef0f6;padding:1px 6px;border-radius:5px;font-size:11.5px;}
+  a{color:var(--purple);}
+
+  /* ================= LOGIN ================= */
+  #loginScreen{position:fixed;inset:0;background:var(--white);display:flex;z-index:500;}
+  #loginScreen.hidden{display:none;}
+  .login-art{flex:1;background:linear-gradient(160deg,#dfe1e8,#c9cbd6) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="%23ffffff08"/></svg>');
+    display:flex;flex-direction:column;justify-content:space-between;padding:40px;position:relative;overflow:hidden;}
+  .login-art .brandmark{display:flex;align-items:center;gap:10px;}
+  .login-art .brandmark .logo-badge{width:46px;height:46px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:var(--shadow);}
+  .login-art .brandmark .name b.red{color:var(--red);} .login-art .brandmark .name b.navy{color:var(--navy);}
+  .login-art .brandmark .name div{font-size:19px;font-weight:800;letter-spacing:.02em;}
+  .login-art .brandmark .name span{font-size:11px;color:#555;display:block;margin-top:1px;}
+  .login-art .camicon{font-size:120px;text-align:center;opacity:.75;filter:drop-shadow(0 10px 20px rgba(0,0,0,.15));}
+  .login-art .foot{text-align:center;font-size:11px;color:#555;background:rgba(255,255,255,.5);padding:8px;border-radius:8px;}
+  .login-form-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:40px;}
+  .login-form{width:100%;max-width:360px;}
+  .login-form h1{font-size:26px;margin:0 0 4px;color:var(--navy);}
+  .login-form p.sub{color:var(--muted);margin:0 0 26px;}
+  .login-form label{display:block;font-weight:600;color:var(--navy);font-size:13px;margin-bottom:6px;}
+  .login-form .fieldwrap{position:relative;margin-bottom:18px;}
+  .login-form input{width:100%;padding:12px 14px 12px 38px;border:1px solid var(--border);background:var(--grey-bg);
+    border-radius:9px;font-size:14px;}
+  .login-form .fieldwrap .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);}
+  .login-form button.loginbtn{width:100%;padding:13px;background:var(--red);color:#fff;border:none;border-radius:9px;
+    font-weight:700;font-size:15px;cursor:pointer;margin-top:6px;}
+  .login-form button.loginbtn:hover{background:var(--red-dark);}
+  .login-form .hint{font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.5;}
+  .login-form .urlfield{margin-top:22px;padding-top:18px;border-top:1px dashed var(--border);}
+
+  /* ================= APP SHELL ================= */
+  #app{display:none;}
+  #app.show{display:flex;}
+  .shell{display:flex;min-height:100vh;width:100%;}
+  .sidebar{width:250px;flex:none;background:var(--white);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:18px 14px;position:sticky;top:0;height:100vh;}
+  .sidebar .brand{display:flex;align-items:center;gap:8px;padding:6px 8px 22px;}
+  .sidebar .brand .logo-badge{width:32px;height:32px;border-radius:50%;background:var(--purple-bg);display:flex;
+    align-items:center;justify-content:center;font-size:15px;flex:none;}
+  .sidebar .brand .name{font-weight:800;font-size:16px;line-height:1.1;}
+  .sidebar .brand .name b.red{color:var(--red);} .sidebar .brand .name b.navy{color:var(--navy);}
+  .sidebar .brand .sub{font-size:9.5px;color:var(--muted);letter-spacing:.03em;}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:9px;color:#5b6072;
+    font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:2px;}
+  .nav-item .ic{width:18px;text-align:center;flex:none;}
+  .nav-item:hover{background:#f7f7fc;}
+  .nav-item.active{background:var(--purple-bg);color:var(--navy);}
+  .nav-item.active .ic{color:var(--purple);}
+  .nav-sub{margin-left:30px;}
+  .nav-sub .nav-item{font-size:12.5px;padding:8px 10px;}
+  .sidebar-spacer{flex:1;}
+  .panic-btn{background:var(--red);color:#fff;border:none;border-radius:10px;padding:13px;font-weight:700;
+    font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .panic-btn:hover{background:var(--red-dark);}
+
+  .main-col{flex:1;min-width:0;display:flex;flex-direction:column;}
+  header.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:14px 26px;
+    display:flex;align-items:center;gap:16px;justify-content:flex-end;flex-wrap:wrap;}
+  .conn-inline{display:flex;align-items:center;gap:8px;margin-right:auto;}
+  .conn-inline input{border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;
+    background:var(--grey-bg);min-width:200px;}
+  .conn-inline .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);}
+  .conn-inline .dot.on{background:var(--green);} .conn-inline .dot.off{background:var(--red);}
+  .arm-toggle{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;user-select:none;}
+  .arm-toggle .track{width:44px;height:24px;border-radius:14px;background:var(--purple);position:relative;transition:.2s;}
+  .arm-toggle .track.off{background:#d7dae3;}
+  .arm-toggle .track .knob{width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:23px;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+  .arm-toggle .track.off .knob{left:3px;}
+  .arm-toggle.armed{color:var(--purple);}
+  .icon-btn{position:relative;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:#fff;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--navy);font-size:15px;}
+  .icon-btn .count{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:9.5px;
+    font-weight:700;border-radius:10px;padding:1px 5px;min-width:15px;text-align:center;}
+  .who{display:flex;align-items:center;gap:6px;color:var(--navy);font-weight:600;font-size:13px;cursor:pointer;}
+  .logout-link{display:flex;align-items:center;gap:6px;color:var(--red);font-weight:600;font-size:13px;cursor:pointer;}
+
+  main{padding:24px 28px;flex:1;}
+  .view{display:none;} .view.active{display:block;}
+  .section-tabs{display:flex;gap:28px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  .section-tab{padding-bottom:12px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:14px;}
+  .section-tab.active{color:var(--navy);border-color:var(--navy);}
+  .view-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+  .view-head h1{font-size:17px;margin:0;color:var(--navy);font-weight:700;}
+  .link-action{color:var(--red);font-weight:700;font-size:13.5px;cursor:pointer;text-decoration:none;}
+  .link-action:hover{text-decoration:underline;}
+
+  .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .card + .card{margin-top:16px;}
+  .card .card-pad{padding:18px 20px;}
+  .card h3{margin:0 0 14px;font-size:14px;color:var(--navy);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;background:var(--grey-bg);color:#6b7186;font-weight:700;font-size:11.5px;
+    text-transform:uppercase;letter-spacing:.03em;padding:12px 16px;border-bottom:1px solid var(--border);}
+  tbody td{padding:14px 16px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.clickable{cursor:pointer;} tbody tr.clickable:hover{background:#fafafe;}
+  .cell-strong{font-weight:700;color:var(--navy);}
+  .cell-sub{font-size:11.5px;color:var(--muted);}
+  .status-online{color:var(--green);font-weight:700;} .status-offline{color:var(--muted);font-weight:700;}
+  .status-connecting{color:var(--amber);font-weight:700;} .status-error{color:var(--red);font-weight:700;}
+  .thumb{width:56px;height:42px;border-radius:7px;object-fit:cover;background:#ddd;display:block;}
+  .thumb-ph{width:56px;height:42px;border-radius:7px;background:#dfe1ea;display:flex;align-items:center;
+    justify-content:center;color:#9aa0b4;font-size:16px;}
+
+  button{cursor:pointer;}
+  .btn{border:1px solid var(--border);background:#fff;color:var(--navy);border-radius:8px;padding:9px 16px;
+    font-weight:700;font-size:12.5px;}
+  .btn:hover{border-color:var(--navy);}
+  .btn.solid-red{background:var(--red);color:#fff;border-color:var(--red);}
+  .btn.solid-red:hover{background:var(--red-dark);}
+  .btn.solid-green{background:var(--green);color:#fff;border-color:var(--green);}
+  .btn.soft-pink{background:var(--pink-bg);color:var(--pink-text);border-color:transparent;}
+  .btn.soft-green{background:var(--green-bg);color:var(--green);border-color:transparent;}
+  .btn.small{padding:6px 12px;font-size:11.5px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+  .field label{font-weight:700;color:var(--navy);font-size:12.5px;}
+  .field input,.field select,.field textarea{border:1px solid var(--border);background:var(--grey-bg);
+    border-radius:8px;padding:11px 13px;font-size:13.5px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;max-width:760px;}
+  .radio-row{display:flex;gap:26px;margin-bottom:16px;flex-wrap:wrap;}
+  .radio-opt{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;color:var(--navy);cursor:pointer;}
+  .checkbox-row{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--navy);}
+
+  .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border-radius:6px;padding:3px 9px;
+    background:var(--purple-bg);color:var(--purple);border:1px solid transparent;font-weight:600;}
+  .chip.known{background:var(--green-bg);color:var(--green);}
+  .chip.unknown{background:var(--amber-bg);color:var(--amber);}
+  .chip.weapon{background:var(--pink-bg);color:var(--red);font-weight:800;}
+  .chip.empty{background:transparent;border:1px dashed var(--border);color:var(--muted);}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;}
+
+  .empty-state{color:var(--muted);text-align:center;padding:34px 10px;font-size:13px;}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:8px;}
+  .note-banner{background:var(--amber-bg);color:#8a6416;border:1px solid #f0dcae;border-radius:8px;padding:9px 13px;
+    font-size:12px;margin-bottom:14px;}
+
+  /* camera grid on Streaming tab (Figma uses list rows w/ thumbnail — implemented as table above);
+     detail modal below matches "View Camera" full player */
+  .player-modal{position:fixed;inset:0;background:rgba(10,12,26,.7);z-index:300;display:none;
+    align-items:flex-start;justify-content:center;padding:26px;overflow-y:auto;}
+  .player-modal.show{display:flex;}
+  .player{width:100%;max-width:900px;background:#000;border-radius:12px;overflow:hidden;}
+  .player-head{background:#0c1220;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:10px;font-size:13px;}
+  .player-head .live-dot{color:#3ee06f;font-weight:700;}
+  .player-head .x{margin-left:auto;cursor:pointer;font-size:18px;}
+  .player-body{position:relative;aspect-ratio:16/10;background:#111;display:flex;align-items:center;justify-content:center;}
+  .player-body img{width:100%;height:100%;object-fit:cover;}
+  .player-body .noimg{color:#8890a6;font-size:13px;text-align:center;padding:20px;}
+  .player-side{position:absolute;right:14px;top:14px;display:flex;flex-direction:column;gap:10px;}
+  .player-side .sbtn{width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;border:none;}
+  .player-controls{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.45);
+    border-radius:30px;padding:9px 20px;display:flex;gap:20px;color:#fff;font-size:16px;}
+  .player-detects{padding:12px 18px;background:#0c1220;display:flex;gap:8px;flex-wrap:wrap;}
+  .player-cfg{padding:12px 18px;background:#131a2c;color:#cdd2e5;font-size:12px;}
+  .player-cfg input{width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2c3350;background:#0c1220;color:#fff;margin-top:6px;}
+
+  #toasts{position:fixed;top:16px;right:16px;z-index:600;display:flex;flex-direction:column;gap:8px;width:300px;}
+  .toast{background:#fff;border:1px solid var(--red);border-left:5px solid var(--red);border-radius:8px;
+    padding:10px 12px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.18);}
+  .toast.medium{border-color:var(--amber);border-left-color:var(--amber);}
+  .toast .tt{font-weight:800;margin-bottom:2px;color:var(--navy);}
+  body.flash #app{animation:flashbg .5s ease-out 2;}
+  @keyframes flashbg{0%{background:transparent;}50%{background:#fde3e3;}100%{background:transparent;}}
+
+  .modal-backdrop{position:fixed;inset:0;background:rgba(10,12,26,.55);display:none;align-items:center;
+    justify-content:center;z-index:400;padding:20px;}
+  .modal-backdrop.show{display:flex;}
+  .modal{background:#fff;border-radius:12px;max-width:600px;width:100%;max-height:85vh;overflow-y:auto;padding:22px;}
+  .modal img{width:100%;border-radius:8px;border:1px solid var(--border);margin:10px 0;}
+  .modal pre{white-space:pre-wrap;background:var(--grey-bg);padding:10px;border-radius:8px;font-size:11.5px;max-height:220px;overflow:auto;}
+
+  .chat-log{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;margin-bottom:14px;}
+  .chat-msg{padding:10px 14px;border-radius:10px;font-size:13px;max-width:80%;line-height:1.5;}
+  .chat-msg.q{background:var(--navy);color:#fff;align-self:flex-end;font-weight:600;}
+  .chat-msg.a{background:var(--grey-bg);border:1px solid var(--border);align-self:flex-start;white-space:pre-wrap;}
+</style>
+</head>
+<body>
+<div id="toasts"></div>
+
+<!-- ================= LOGIN (cosmetic — this backend has no auth; see note) ================= -->
+<div id="loginScreen">
+  <div class="login-art">
+    <div class="brandmark">
+      <div class="logo-badge">🛡️</div>
+      <div class="name"><div><b class="red">NEX</b><b class="navy">GEN</b></div><span>Security &amp; Management</span></div>
+    </div>
+    <div class="camicon">📹</div>
+    <div class="foot">Copyright © 2026 NexGen. All Rights Reserved</div>
+  </div>
+  <div class="login-form-wrap">
+    <form class="login-form" onsubmit="return doLogin(event)">
+      <h1>Login</h1>
+      <p class="sub">Enter your information below</p>
+      <label>Username</label>
+      <div class="fieldwrap"><span class="ic">👤</span><input id="loginUser" placeholder="Enter username" value="admin" /></div>
+      <label>Password</label>
+      <div class="fieldwrap"><span class="ic">🔒</span><input id="loginPass" type="password" placeholder="Enter password" value="admin" /></div>
+      <button class="loginbtn" type="submit">Login</button>
+      <div class="urlfield">
+        <label>Backend URL</label>
+        <div class="fieldwrap"><span class="ic">🌐</span><input id="baseUrlInput" placeholder="http://localhost:8000" /></div>
+      </div>
+      <p class="hint">This backend ships with no authentication (see its README's Security Notes) — this screen is a
+        cosmetic front door only, not a real login. Every screen behind it talks straight to your local NexGen API.</p>
+    </form>
+  </div>
+</div>
+
+<!-- ================= MODALS ================= -->
+<div class="player-modal" id="playerModal"><div class="player" id="playerContent"></div></div>
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal"><button class="btn small" style="float:right;" onclick="closeModal()">✕ Close</button><div id="modalContent"></div></div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo-badge">🛡️</div>
+      <div><div class="name"><b class="red">NEX</b><b class="navy">GEN</b></div><div class="sub">SECURITY &amp; MANAGEMENT</div></div>
+    </div>
+    <div class="nav-item" data-view="cameras" onclick="showView('cameras')"><span class="ic">📹</span> Streaming</div>
+    <div class="nav-item" data-view="alerts" onclick="showView('alerts')"><span class="ic">🚨</span> Breach Alerts</div>
+    <div class="nav-item" data-view="cammgmt" onclick="showView('cammgmt')"><span class="ic">🎛️</span> Camera Management</div>
+    <div class="nav-item" data-view="identities" onclick="showView('identities')"><span class="ic">🙂</span> Face Management</div>
+    <div class="nav-item" data-view="complaints" onclick="showView('complaints')"><span class="ic">💬</span> Contact / Complaint</div>
+    <div class="nav-item" data-view="settings" onclick="showView('settings')"><span class="ic">⚙️</span> Setting</div>
+    <div class="nav-sub" id="settingsSubnav" style="display:none;">
+      <div class="nav-item" data-view="settings" onclick="showView('settings')"><span class="ic">🖥️</span> System Setting</div>
+      <div class="nav-item" data-view="chat" onclick="showView('chat')"><span class="ic">📍</span> Ask NexGen</div>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <button class="panic-btn" onclick="toast('Panic acknowledged','This is a UI affordance — wire it to your own emergency workflow.','high')">⛔ Create Panic</button>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <div class="conn-inline">
+        <span class="dot" id="connDot"></span>
+        <input id="baseUrlInput2" placeholder="http://localhost:8000" />
+        <button class="btn small" onclick="connect(true)">Connect</button>
+      </div>
+      <div class="arm-toggle" id="armToggle" onclick="toggleArm()">
+        <span id="armLabel">Unarm</span><span class="track off" id="armTrack"><span class="knob"></span></span>
+      </div>
+      <div class="icon-btn" onclick="showView('alerts')">🔔<span class="count" id="alertBadge" style="display:none;">0</span></div>
+      <div class="who">👤 Admin</div>
+      <div class="logout-link" onclick="doLogout()">⭯ Logout</div>
+    </header>
+
+    <main>
+
+      <!-- ===================== STREAMING ===================== -->
+      <div class="view active" id="view-cameras">
+        <div class="view-head"><h1>Live Cameras</h1><span class="link-action" onclick="document.getElementById('addCamCard').scrollIntoView({behavior:'smooth'})">+ Add new Camera</span></div>
+        <div class="card"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th></th><th>Camera</th><th>Location</th><th>Current status</th><th></th></tr></thead>
+            <tbody id="cameraTbody"><tr><td colspan="5" class="empty-state">Connect to your backend to load cameras.</td></tr></tbody>
+          </table>
+        </div></div>
+
+        <div class="card" id="addCamCard"><div class="card-pad">
+          <h3>Register a camera</h3>
+          <div class="form-grid">
+            <div class="field"><label>Name</label><input id="newCamName" placeholder="Lobby" /></div>
+            <div class="field"><label>Location</label><input id="newCamLoc" placeholder="Front door" /></div>
+            <div class="field" style="grid-column:1/-1;"><label>RTSP / stream URL</label><input id="newCamUrl" placeholder="rtsp://user:pass@192.168.1.50:554/Streaming/Channels/101" /></div>
+            <div class="field"><label>Sample FPS (optional)</label><input id="newCamFps" type="number" step="0.1" placeholder="default" /></div>
+            <div class="field"><label>&nbsp;</label><div class="checkbox-row"><input id="newCamEnabled" type="checkbox" checked style="width:auto;" /> Start immediately</div></div>
+          </div>
+          <div class="btn-row"><button class="btn solid-red" onclick="createCamera()">Add camera</button></div>
+          <p class="hint">Hikvision example: <code>rtsp://user:pass@&lt;ip&gt;:554/Streaming/Channels/101</code> (main) or <code>...102</code> (sub-stream). Encode special characters in the password (<code>@</code> → <code>%40</code>).</p>
+        </div></div>
+      </div>
+
+      <!-- ===================== BREACH ALERTS ===================== -->
+      <div class="view" id="view-alerts">
+        <div class="view-head"><h1>Breach Alerts</h1></div>
+        <div class="section-tabs">
+          <div class="section-tab active" data-sub="active" onclick="showAlertSub('active')">Active Breach</div>
+          <div class="section-tab" data-sub="logs" onclick="showAlertSub('logs')">Logs / History</div>
+        </div>
+        <div class="card"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Breaches</th><th>Camera</th><th>Created</th><th>Action</th></tr></thead>
+            <tbody id="alertsTbodyActive"><tr><td colspan="4" class="empty-state">No alerts loaded yet.</td></tr></tbody>
+          </table>
+        </div></div>
+        <div class="card" id="alertsLogsCard" style="display:none;"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Breaches</th><th>Camera</th><th>Created</th><th>Status</th></tr></thead>
+            <tbody id="alertsTbodyLogs"><tr><td colspan="4" class="empty-state">No history yet.</td></tr></tbody>
+          </table>
+        </div></div>
+      </div>
+
+      <!-- ===================== CAMERA MANAGEMENT ===================== -->
+      <div class="view" id="view-cammgmt">
+        <div class="view-head"><h1>Camera Management</h1></div>
+        <div class="section-tabs">
+          <div class="section-tab active" data-sub="list" onclick="showCamMgmtSub('list')">Camera's List</div>
+          <div class="section-tab" data-sub="cfg" onclick="showCamMgmtSub('cfg')">Camera Configuration</div>
+        </div>
+        <div class="card" id="cammgmtListCard"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Name</th><th>Stream host</th><th>Sample FPS</th><th>Status</th><th>Location</th><th>Actions</th></tr></thead>
+            <tbody id="cammgmtTbody"><tr><td colspan="6" class="empty-state">No cameras yet.</td></tr></tbody>
+          </table>
+        </div></div>
+        <div class="card" id="cammgmtCfgCard" style="display:none;"><div class="card-pad">
+          <div class="form-grid">
+            <div class="field"><label>Name</label><input id="cfgName" placeholder="Enter name" /></div>
+            <div class="field"><label>Location</label><input id="cfgLoc" placeholder="lab room e.g" /></div>
+            <div class="field"><label>IP</label><input id="cfgIp" placeholder="192.168.2.1 e.g" /></div>
+            <div class="field"><label>Port</label><input id="cfgPort" placeholder="554 e.g" value="554" /></div>
+            <div class="field"><label>Username</label><input id="cfgUser" placeholder="Enter username" /></div>
+            <div class="field"><label>Password</label><input id="cfgPass" type="password" placeholder="Enter password" /></div>
+            <div class="field" style="grid-column:1/-1;"><label>Stream path</label><input id="cfgPath" placeholder="/Streaming/Channels/101" value="/Streaming/Channels/101" /></div>
+          </div>
+          <p class="hint">Builds <code id="cfgPreview">rtsp://user:pass@ip:554/Streaming/Channels/101</code></p>
+          <div class="btn-row"><button class="btn solid-red" onclick="saveCfgCamera()">Save</button></div>
+        </div></div>
+      </div>
+
+      <!-- ===================== FACE MANAGEMENT ===================== -->
+      <div class="view" id="view-identities">
+        <div class="view-head"><h1>Face Management</h1></div>
+        <div class="section-tabs">
+          <div class="section-tab active" data-sub="add" onclick="showFaceSub('add')">Add Face Details</div>
+          <div class="section-tab" data-sub="manage" onclick="showFaceSub('manage')">Manage Existing Faces</div>
+        </div>
+        <div class="card" id="faceAddCard"><div class="card-pad">
+          <div class="note-banner">This NexGen backend enrolls faces offline (a Python script builds <code>identity_store.pkl</code> from photo folders) — there's no upload endpoint yet, so this form can't push a photo to the server. Fill it in to see the intended flow; use "Reload from disk" on the right tab after re-running enrollment.</div>
+          <div class="form-grid">
+            <div class="field"><label>Full name</label><input id="faceName" placeholder="Enter full name" /></div>
+            <div class="field"><label>Upload Image</label><input type="file" id="faceUpload" accept="image/*" /></div>
+          </div>
+          <div class="radio-row">
+            <label class="radio-opt"><input type="radio" name="faceType" checked style="width:auto;" /> Face Permanent</label>
+            <label class="radio-opt"><input type="radio" name="faceType" style="width:auto;" /> Face - Staff and Workers</label>
+            <label class="radio-opt"><input type="radio" name="faceType" style="width:auto;" /> Face Temporary (Visitors)</label>
+          </div>
+          <div class="btn-row"><button class="btn solid-red" disabled title="No backend endpoint for this yet">Add</button></div>
+        </div></div>
+        <div class="card" id="faceManageCard" style="display:none;"><div class="card-pad">
+          <div class="view-head" style="margin-bottom:12px;"><h3 style="margin:0;">Enrolled identities</h3><button class="btn small" onclick="reloadIdentities()">↻ Reload from disk</button></div>
+          <div class="chips" id="identitiesChips"><span class="chip empty">No identities loaded</span></div>
+        </div></div>
+      </div>
+
+      <!-- ===================== CONTACT / COMPLAINT ===================== -->
+      <div class="view" id="view-complaints">
+        <div class="view-head"><h1>Complaint list</h1><span class="link-action" onclick="openNewComplaint()">+ Create new complaint</span></div>
+        <div class="note-banner">There's no complaint/ticketing API on this backend, so this list is kept in your browser only (localStorage) — it won't sync anywhere else.</div>
+        <div class="card"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>ID</th><th>Detail</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+            <tbody id="complaintsTbody"><tr><td colspan="5" class="empty-state">No complaints yet.</td></tr></tbody>
+          </table>
+        </div></div>
+      </div>
+
+      <!-- ===================== SETTINGS ===================== -->
+      <div class="view" id="view-settings">
+        <div class="view-head"><h1>Setting</h1></div>
+        <div class="section-tabs">
+          <div class="section-tab active" data-sub="general" onclick="showSettingsSub('general')">General setting</div>
+          <div class="section-tab" data-sub="armunarm" onclick="showSettingsSub('armunarm')">Arm/unarm</div>
+        </div>
+        <div class="card" id="settingsGeneralCard"><div class="card-pad">
+          <h3>Streaming defaults (read from backend <code>/health</code>)</h3>
+          <div class="chips">
+            <span class="chip">Device: <b id="setDevice">—</b></span>
+            <span class="chip">Sample FPS: <b id="setFps">—</b></span>
+            <span class="chip">Inference width: <b id="setWidth">—</b></span>
+            <span class="chip">Max cameras: <b id="setMax">—</b></span>
+            <span class="chip">Weapon model: <b id="setWeapon">—</b></span>
+            <span class="chip">Qwen chat: <b id="setQwen">—</b></span>
+          </div>
+          <p class="hint">These are set via the backend's <code>.env</code> file, not editable from here.</p>
+        </div></div>
+        <div class="card" id="settingsArmCard" style="display:none;"><div class="card-pad" style="overflow-x:auto;">
+          <p class="hint" style="margin-top:0;">The Arm/Unarm switch in the header starts every enabled camera (Arm) or stops every running camera (Unarm) in one click.</p>
+          <table>
+            <thead><tr><th>State</th><th>Cameras running</th><th>Action</th></tr></thead>
+            <tbody><tr><td id="armStateCell">Unarm</td><td id="armRunningCell">0</td>
+              <td><button class="btn solid-red small" onclick="toggleArm()">Toggle</button></td></tr></tbody>
+          </table>
+        </div></div>
+      </div>
+
+      <!-- ===================== CHAT ===================== -->
+      <div class="view" id="view-chat">
+        <div class="view-head"><h1>Ask NexGen</h1></div>
+        <div class="card"><div class="card-pad">
+          <div class="form-grid" style="margin-bottom:14px;">
+            <div class="field"><label>Camera</label><select id="chatCamera"><option value="">All cameras</option></select></div>
+            <div class="field"><label>Lookback (minutes)</label><input id="chatMinutes" type="number" value="60" /></div>
+          </div>
+          <div class="chat-log" id="chatLog"></div>
+          <div class="btn-row">
+            <input id="chatInput" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;" placeholder="Any unknown people at the lobby in the last hour?" onkeydown="if(event.key==='Enter')sendChat();" />
+            <button class="btn solid-red" onclick="sendChat()">Send</button>
+          </div>
+          <p class="hint">Requires <code>DASHSCOPE_API_KEY</code> on the backend.</p>
+        </div></div>
+      </div>
+
+      <!-- ===================== EVENTS (kept as a data source; reachable via alert/camera clicks) ===================== -->
+      <div class="view" id="view-events">
+        <div class="view-head"><h1>Recent events</h1></div>
+        <div class="card"><div class="card-pad" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Time</th><th>Camera</th><th>Type</th><th>Risk</th><th>Status</th></tr></thead>
+            <tbody id="eventsTbody"><tr><td colspan="5" class="empty-state">No events yet.</td></tr></tbody>
+          </table>
+        </div></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+</div>
+
+<script>
+/* =================================================================
+   State
+================================================================= */
+let baseUrl = localStorage.getItem('nexgen_base_url') || 'http://localhost:8000';
+let ws = null, wsRetryTimer = null;
+let cameras = {}; let camDetections = {};
+let statusPollTimer = null, listPollTimer = null;
+let snapshotUrls = JSON.parse(localStorage.getItem('nexgen_snapshot_urls') || '{}');
+let snapshotTimers = {};
+let armed = false;
+let complaints = JSON.parse(localStorage.getItem('nexgen_complaints') || '[]');
+
+document.getElementById('baseUrlInput').value = baseUrl;
+document.getElementById('baseUrlInput2').value = baseUrl;
+
+/* =================================================================
+   Login (cosmetic)
+================================================================= */
+function doLogin(e){
+  e.preventDefault();
+  const u = document.getElementById('baseUrlInput').value.trim();
+  if(u) document.getElementById('baseUrlInput2').value = u;
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.add('show');
+  connect(false);
+  return false;
+}
+function doLogout(){
+  document.getElementById('app').classList.remove('show');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+if(localStorage.getItem('nexgen_skip_login') === '1'){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.add('show');
+}
+
+/* =================================================================
+   Connection
+================================================================= */
+function apiUrl(path){ return baseUrl.replace(/\/+$/,'') + path; }
+function wsUrl(){ const u=new URL(baseUrl); const s=u.protocol==='https:'?'wss:':'ws:'; return `${s}//${u.host}/api/v1/ws/live`; }
+
+async function connect(fromHeader){
+  const src = fromHeader ? document.getElementById('baseUrlInput2').value : (document.getElementById('baseUrlInput2').value || document.getElementById('baseUrlInput').value);
+  baseUrl = (src||'http://localhost:8000').trim().replace(/\/+$/,'');
+  localStorage.setItem('nexgen_base_url', baseUrl); localStorage.setItem('nexgen_skip_login','1');
+  document.getElementById('baseUrlInput2').value = baseUrl;
+  setConn(false);
+  try{
+    const health = await (await fetch(apiUrl('/api/v1/health'))).json();
+    document.getElementById('setDevice').textContent = health.device || '—';
+    document.getElementById('setFps').textContent = health.streaming?.sample_fps ?? '—';
+    document.getElementById('setWidth').textContent = health.streaming?.inference_width ?? '—';
+    document.getElementById('setMax').textContent = health.streaming?.max_cameras ?? '—';
+    document.getElementById('setWeapon').textContent = health.weapon_model_loaded ? 'loaded' : 'not loaded';
+    document.getElementById('setQwen').textContent = health.qwen_enabled ? 'enabled' : 'disabled';
+  }catch(e){ toast('Could not reach backend','Check the URL and that uvicorn is running.','high'); return; }
+
+  await loadCameras(); await loadAlerts(); await loadEvents(); await loadIdentities();
+  renderComplaints();
+  openSocket();
+  clearInterval(statusPollTimer); statusPollTimer = setInterval(pollCameraStatus, 5000);
+  clearInterval(listPollTimer); listPollTimer = setInterval(loadCameras, 15000);
+}
+function setConn(on){ document.getElementById('connDot').className = 'dot ' + (on?'on':'off'); }
+
+function openSocket(){
+  if(ws){ try{ws.close();}catch(e){} }
+  ws = new WebSocket(wsUrl());
+  ws.onopen = ()=>{ setConn(true); clearTimeout(wsRetryTimer); };
+  ws.onclose = ()=>{ setConn(false); wsRetryTimer=setTimeout(openSocket,4000); };
+  ws.onerror = ()=>{};
+  ws.onmessage = (evt)=>{ let msg; try{msg=JSON.parse(evt.data);}catch(e){return;} handleMessage(msg); };
+}
+
+/* =================================================================
+   Arm / Unarm — bulk start/stop of all cameras
+================================================================= */
+function setArmUI(){
+  document.getElementById('armLabel').textContent = armed ? 'Arm' : 'Unarm';
+  document.getElementById('armTrack').className = 'track' + (armed ? '' : ' off');
+  document.getElementById('armStateCell').textContent = armed ? 'Arm' : 'Unarm';
+  document.getElementById('armRunningCell').textContent = Object.values(cameras).filter(c=>(c.status||'')==='online').length;
+}
+async function toggleArm(){
+  armed = !armed;
+  setArmUI();
+  const ids = Object.keys(cameras);
+  for(const id of ids){
+    try{ await fetch(apiUrl(`/api/v1/cameras/${id}/${armed?'start':'stop'}`), {method:'POST'}); }catch(e){}
+  }
+  toast(armed?'System armed':'System unarmed', armed?'Starting all registered cameras.':'Stopping all running cameras.','medium');
+  await loadCameras();
+}
+
+/* =================================================================
+   WebSocket message handling
+================================================================= */
+function handleMessage(msg){
+  switch(msg.type){
+    case 'snapshot':
+      (msg.cameras||[]).forEach(c=>{ cameras[c.camera_id] = {...(cameras[c.camera_id]||{}), ...c}; });
+      renderCameraTable(); renderCamMgmtTable(); setArmUI();
+      (msg.recent_alerts||[]).forEach(a=>upsertAlertRow(a));
+      renderAlertBadge();
+      break;
+    case 'detection':
+      camDetections[msg.camera_id] = {faces:msg.faces||[], weapons:msg.weapons||[], at:msg.observed_at};
+      renderCameraTable();
+      break;
+    case 'camera.status':
+      if(cameras[msg.camera_id]) Object.assign(cameras[msg.camera_id], msg);
+      renderCameraTable(); renderCamMgmtTable(); setArmUI();
+      break;
+    case 'event.opened':
+      prependEventRow(msg.event, msg.camera_id);
+      break;
+    case 'alert':
+      upsertAlertRow(msg.alert); renderAlertBadge();
+      const p=(msg.alert.priority||'').toLowerCase();
+      toast(msg.alert.title, msg.alert.message, p==='high'?'high':'medium');
+      if(p==='high'){ flashScreen(); beep(); }
+      break;
+    case 'alert.acknowledged':
+      moveAlertToLogs(msg.alert_id); renderAlertBadge();
+      break;
+    case 'ping': break;
+  }
+}
+function flashScreen(){ document.body.classList.remove('flash'); void document.body.offsetWidth; document.body.classList.add('flash'); }
+function beep(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(); const g=ctx.createGain();
+  o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.15,ctx.currentTime);
+  o.start(); o.stop(ctx.currentTime+0.18); }catch(e){} }
+function toast(title,message,level){
+  const box=document.getElementById('toasts'); const el=document.createElement('div');
+  el.className='toast '+(level==='high'?'':'medium');
+  el.innerHTML = `<div class="tt">${escapeHtml(title||'Notice')}</div><div>${escapeHtml(message||'')}</div>`;
+  box.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300);},6000);
+}
+
+/* =================================================================
+   Cameras — Streaming tab
+================================================================= */
+async function loadCameras(){
+  try{
+    const data = await (await fetch(apiUrl('/api/v1/cameras'))).json();
+    (data.cameras||[]).forEach(c=>{ cameras[c.camera_id] = {...(cameras[c.camera_id]||{}), ...c}; });
+    renderCameraTable(); renderCamMgmtTable(); populateCameraSelects(); setArmUI();
+  }catch(e){}
+}
+async function pollCameraStatus(){
+  try{
+    const data = await (await fetch(apiUrl('/api/v1/cameras/status'))).json();
+    (data.pipelines||[]).forEach(p=>{ const id=p.camera_id||p.id; if(id && cameras[id]) cameras[id].pipeline=p; });
+    renderCameraTable();
+  }catch(e){}
+}
+function hostOf(url){ try{ return new URL(url.replace(/^rtsp/,'http')).host; }catch(e){ return url||'—'; } }
+
+function renderCameraTable(){
+  const tbody = document.getElementById('cameraTbody');
+  const ids = Object.keys(cameras);
+  if(!ids.length){ tbody.innerHTML='<tr><td colspan="5" class="empty-state">No cameras registered yet — add one below.</td></tr>'; return; }
+  tbody.innerHTML = ids.map(id=>{
+    const c=cameras[id]; const status=(c.status||'offline').toLowerCase();
+    const det=camDetections[id]||{faces:[],weapons:[]};
+    const snapUrl=snapshotUrls[id];
+    const thumb = snapUrl ? `<img class="thumb" src="${escapeAttr(snapUrl)}" onerror="this.outerHTML='<div class=thumb-ph>📷</div>'" />` : `<div class="thumb-ph">📷</div>`;
+    const chips = [
+      ...det.faces.map(f=>{const known=f.identity_name && f.identity_name!=='unknown'; return `<span class="chip ${known?'known':'unknown'}">👤 ${escapeHtml(f.identity_name||'unknown')}</span>`;}),
+      ...det.weapons.map(w=>`<span class="chip weapon">⚠ ${escapeHtml(w.label||w.class||'weapon')}</span>`)
+    ].join('') || '';
+    return `<tr>
+      <td>${thumb}</td>
+      <td><div class="cell-strong">${escapeHtml(c.name||id)}</div><div class="cell-sub">${hostOf(c.rtsp_url)}</div>${chips?`<div class="chips" style="margin-top:6px;">${chips}</div>`:''}</td>
+      <td>${escapeHtml(c.location||'—')}</td>
+      <td><span class="status-${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span>${c.last_error?`<div class="cell-sub" style="color:var(--red);">⚠ ${escapeHtml(c.last_error)}</div>`:''}</td>
+      <td><div class="btn-row">
+        <button class="btn soft-green small" onclick="openPlayer('${id}')">👁 View</button>
+        <button class="btn soft-pink small" onclick="deleteCamera('${id}')">🗑 Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function populateCameraSelects(){
+  const sel = document.getElementById('chatCamera');
+  const current = sel.value; sel.innerHTML = '<option value="">All cameras</option>';
+  Object.values(cameras).forEach(c=>{ const o=document.createElement('option'); o.value=c.camera_id; o.textContent=c.name||c.camera_id; sel.appendChild(o); });
+  sel.value = current;
+}
+
+async function createCamera(){
+  const name=document.getElementById('newCamName').value.trim();
+  const rtsp_url=document.getElementById('newCamUrl').value.trim();
+  const location=document.getElementById('newCamLoc').value.trim();
+  const fps=document.getElementById('newCamFps').value;
+  const enabled=document.getElementById('newCamEnabled').checked;
+  if(!name||!rtsp_url){ toast('Missing fields','Name and stream URL are required.','medium'); return; }
+  const body={name, rtsp_url, location:location||null, enabled}; if(fps) body.sample_fps=parseFloat(fps);
+  try{
+    const res=await fetch(apiUrl('/api/v1/cameras'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    if(!res.ok){ toast('Could not add camera', data.detail||JSON.stringify(data),'medium'); return; }
+    if(data.warning) toast('Added with a warning', data.warning, 'medium');
+    document.getElementById('newCamName').value=''; document.getElementById('newCamUrl').value='';
+    document.getElementById('newCamLoc').value=''; document.getElementById('newCamFps').value='';
+    await loadCameras();
+  }catch(e){ toast('Request failed', String(e), 'high'); }
+}
+async function deleteCamera(id){
+  if(!confirm('Remove this camera? Its historical events/alerts are kept.')) return;
+  try{ await fetch(apiUrl(`/api/v1/cameras/${id}`),{method:'DELETE'}); delete cameras[id]; delete camDetections[id]; renderCameraTable(); renderCamMgmtTable(); }
+  catch(e){ toast('Request failed', String(e), 'high'); }
+}
+async function cameraAction(id, action){
+  try{ const res=await fetch(apiUrl(`/api/v1/cameras/${id}/${action}`),{method:'POST'}); const data=await res.json();
+    if(!res.ok) toast('Action failed', data.detail||JSON.stringify(data),'medium'); await loadCameras();
+  }catch(e){ toast('Request failed', String(e), 'high'); }
+}
+
+/* =================================================================
+   Camera Management tab (List + Configuration)
+================================================================= */
+function showCamMgmtSub(name){
+  document.querySelectorAll('#view-cammgmt .section-tab').forEach(t=>t.classList.toggle('active', t.dataset.sub===name));
+  document.getElementById('cammgmtListCard').style.display = name==='list' ? '' : 'none';
+  document.getElementById('cammgmtCfgCard').style.display = name==='cfg' ? '' : 'none';
+}
+['cfgIp','cfgPort','cfgUser','cfgPass','cfgPath'].forEach(id=>{
+  document.addEventListener('DOMContentLoaded', ()=>{
+    document.getElementById(id).addEventListener('input', updateCfgPreview);
+  });
+});
+function updateCfgPreview(){
+  const ip=document.getElementById('cfgIp').value||'ip', port=document.getElementById('cfgPort').value||'554';
+  const user=document.getElementById('cfgUser').value||'user', pass=document.getElementById('cfgPass').value||'pass';
+  const path=document.getElementById('cfgPath').value||'/Streaming/Channels/101';
+  document.getElementById('cfgPreview').textContent = `rtsp://${user}:${pass}@${ip}:${port}${path}`;
+}
+async function saveCfgCamera(){
+  const name=document.getElementById('cfgName').value.trim();
+  const location=document.getElementById('cfgLoc').value.trim();
+  const ip=document.getElementById('cfgIp').value.trim();
+  const port=document.getElementById('cfgPort').value.trim()||'554';
+  const user=document.getElementById('cfgUser').value.trim();
+  const pass=document.getElementById('cfgPass').value.trim();
+  const path=document.getElementById('cfgPath').value.trim()||'/Streaming/Channels/101';
+  if(!name||!ip){ toast('Missing fields','Name and IP are required.','medium'); return; }
+  const rtsp_url = `rtsp://${user}:${pass}@${ip}:${port}${path}`;
+  try{
+    const res=await fetch(apiUrl('/api/v1/cameras'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,rtsp_url,location:location||null,enabled:true})});
+    const data=await res.json();
+    if(!res.ok){ toast('Could not save', data.detail||JSON.stringify(data),'medium'); return; }
+    toast('Camera saved','Registered and starting.', 'medium');
+    ['cfgName','cfgLoc','cfgIp','cfgUser','cfgPass'].forEach(id=>document.getElementById(id).value='');
+    await loadCameras(); showCamMgmtSub('list');
+  }catch(e){ toast('Request failed', String(e), 'high'); }
+}
+function renderCamMgmtTable(){
+  const tbody=document.getElementById('cammgmtTbody'); const ids=Object.keys(cameras);
+  if(!ids.length){ tbody.innerHTML='<tr><td colspan="6" class="empty-state">No cameras yet.</td></tr>'; return; }
+  tbody.innerHTML = ids.map(id=>{
+    const c=cameras[id]; const status=(c.status||'offline').toLowerCase();
+    return `<tr>
+      <td class="cell-strong">${escapeHtml(c.name||id)}</td>
+      <td>${hostOf(c.rtsp_url)}</td>
+      <td>${c.sample_fps ?? '—'}</td>
+      <td><span class="status-${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span></td>
+      <td>${escapeHtml(c.location||'—')}</td>
+      <td><div class="btn-row">
+        <button class="btn small" onclick="cameraAction('${id}','restart')">↻ Restart</button>
+        <button class="btn soft-pink small" onclick="deleteCamera('${id}')">🗑 Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+/* =================================================================
+   Camera player modal ("View Camera")
+================================================================= */
+function openPlayer(id){
+  const c = cameras[id]; if(!c) return;
+  const snapUrl = snapshotUrls[id] || '';
+  const html = `
+    <div class="player-head"><b>${escapeHtml(c.name||id)}</b> <span class="live-dot">● Live</span>
+      <span style="margin-left:6px;color:#9aa0c0;">${new Date().toLocaleString()}</span>
+      <span class="x" onclick="closePlayer()">✕</span></div>
+    <div class="player-body">
+      ${snapUrl ? `<img id="playerImg" src="${escapeAttr(snapUrl)}" onerror="this.style.display='none';document.getElementById('playerNoImg').style.display='block';" />` : ''}
+      <div class="noimg" id="playerNoImg" style="${snapUrl?'display:none;':''}">No live preview URL configured for this camera yet.<br>Add one below.</div>
+      <div class="player-side">
+        <button class="sbtn" title="Zoom">🔍</button>
+        <button class="sbtn" title="Location">📍</button>
+        <button class="sbtn" title="Schedule">🗓️</button>
+        <button class="sbtn" title="Settings">⚙️</button>
+      </div>
+      <div class="player-controls">
+        <span>📷</span><span>▶</span><span>🔊</span>
+      </div>
+    </div>
+    <div class="player-detects" id="playerDetects"></div>
+    <div class="player-cfg">
+      Live-preview URL (e.g. Hikvision ISAPI snapshot): <code>http://user:pass@&lt;ip&gt;/ISAPI/Streaming/channels/101/picture</code>
+      <input id="playerSnapInput" value="${escapeAttr(snapUrl)}" placeholder="http://user:pass@camera-ip/ISAPI/Streaming/channels/101/picture" />
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn small" onclick="savePlayerSnap('${id}')">Save preview URL</button>
+        <button class="btn small" onclick="cameraAction('${id}','restart')">↻ Restart pipeline</button>
+      </div>
+    </div>`;
+  document.getElementById('playerContent').innerHTML = html;
+  document.getElementById('playerModal').classList.add('show');
+  renderPlayerDetects(id);
+  if(snapUrl){
+    if(snapshotTimers['_player']) clearInterval(snapshotTimers['_player']);
+    snapshotTimers['_player'] = setInterval(()=>{
+      const img=document.getElementById('playerImg'); if(img) img.src = snapUrl+(snapUrl.includes('?')?'&':'?')+'_='+Date.now();
+    }, 2000);
+  }
+  document.getElementById('playerModal')._camId = id;
+}
+function renderPlayerDetects(id){
+  const det = camDetections[id]||{faces:[],weapons:[]};
+  const chips=[
+    ...det.faces.map(f=>{const known=f.identity_name && f.identity_name!=='unknown'; return `<span class="chip ${known?'known':'unknown'}" style="color:#fff;background:${known?'#1fae5d':'#e0a020'};">👤 ${escapeHtml(f.identity_name||'unknown')}</span>`;}),
+    ...det.weapons.map(w=>`<span class="chip weapon" style="color:#fff;background:#db4b41;">⚠ ${escapeHtml(w.label||w.class||'weapon')}</span>`)
+  ].join('') || '<span class="chip empty" style="color:#8890a6;">No detections yet</span>';
+  const el=document.getElementById('playerDetects'); if(el) el.innerHTML = chips;
+}
+function savePlayerSnap(id){
+  const val = document.getElementById('playerSnapInput').value.trim();
+  if(val) snapshotUrls[id]=val; else delete snapshotUrls[id];
+  localStorage.setItem('nexgen_snapshot_urls', JSON.stringify(snapshotUrls));
+  renderCameraTable(); openPlayer(id);
+}
+function closePlayer(){ document.getElementById('playerModal').classList.remove('show'); if(snapshotTimers['_player']) clearInterval(snapshotTimers['_player']); }
+
+/* =================================================================
+   Breach Alerts (Active / Logs)
+================================================================= */
+function showAlertSub(name){
+  document.querySelectorAll('#view-alerts .section-tab').forEach(t=>t.classList.toggle('active', t.dataset.sub===name));
+  document.querySelector('#view-alerts .card').style.display = name==='active' ? '' : 'none';
+  document.getElementById('alertsLogsCard').style.display = name==='logs' ? '' : 'none';
+}
+async function loadAlerts(){
+  try{
+    const data = await (await fetch(apiUrl('/api/v1/alerts?limit=100'))).json();
+    document.getElementById('alertsTbodyActive').innerHTML='';
+    document.getElementById('alertsTbodyLogs').innerHTML='';
+    (data.alerts||[]).forEach(a=>upsertAlertRow(a));
+    renderAlertBadge();
+  }catch(e){}
+}
+function timeAgo(iso){
+  if(!iso) return '';
+  const s=(Date.now()-new Date(iso).getTime())/1000;
+  if(s<60) return 'just now'; if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago';
+}
+function upsertAlertRow(a){
+  const target = a.acknowledged ? 'alertsTbodyLogs' : 'alertsTbodyActive';
+  const other = a.acknowledged ? 'alertsTbodyActive' : 'alertsTbodyLogs';
+  document.getElementById('row-'+other+'-'+a.alert_id)?.remove();
+  const tbody = document.getElementById(target);
+  if(tbody.querySelector('.empty-state')) tbody.innerHTML='';
+  let row = document.getElementById('row-'+target+'-'+a.alert_id);
+  const cam = cameras[a.camera_id];
+  const html = a.acknowledged ? `
+      <td><div class="cell-strong">${escapeHtml(a.title||'Alert')}</div><div class="cell-sub">${escapeHtml(a.message||'')}</div></td>
+      <td>${escapeHtml((cam&&cam.name)||a.camera_id)}</td>
+      <td>${a.created_at?new Date(a.created_at).toLocaleString():''}</td>
+      <td><span class="status-online">Resolved</span></td>` : `
+      <td><div class="cell-strong">${escapeHtml(a.title||'Alert')}</div><div class="cell-sub">Triggered ${timeAgo(a.created_at)}</div></td>
+      <td>${escapeHtml((cam&&cam.name)||a.camera_id)}</td>
+      <td>${a.created_at?new Date(a.created_at).toLocaleDateString():''}</td>
+      <td><button class="btn solid-red small" onclick="ackAlert('${a.alert_id}')">Take Action</button></td>`;
+  if(row){ row.innerHTML = html; }
+  else{ row=document.createElement('tr'); row.id='row-'+target+'-'+a.alert_id; row.innerHTML=html; tbody.prepend(row); }
+}
+function moveAlertToLogs(alertId){
+  ['alertsTbodyActive'].forEach(tb=>{
+    const row=document.getElementById('row-'+tb+'-'+alertId);
+    if(row){ row.querySelector('td:last-child').innerHTML = '<span class="status-online">Resolved</span>'; }
+  });
+}
+async function ackAlert(id){
+  try{ await fetch(apiUrl(`/api/v1/alerts/${id}/ack`),{method:'POST'}); await loadAlerts(); }
+  catch(e){ toast('Request failed', String(e), 'medium'); }
+}
+function renderAlertBadge(){
+  const count = document.querySelectorAll('#alertsTbodyActive tr[id^="row-"]').length;
+  const badge=document.getElementById('alertBadge');
+  if(count>0){ badge.style.display='flex'; badge.textContent=count; } else badge.style.display='none';
+}
+
+/* =================================================================
+   Events
+================================================================= */
+async function loadEvents(){
+  try{
+    const data = await (await fetch(apiUrl('/api/v1/events?limit=100'))).json();
+    const tbody=document.getElementById('eventsTbody'); tbody.innerHTML='';
+    if(!data.events||!data.events.length){ tbody.innerHTML='<tr><td colspan="5" class="empty-state">No events yet.</td></tr>'; return; }
+    data.events.forEach(e=>appendEventRow(e));
+  }catch(e){}
+}
+function riskCls(r){ return (r||'info').toLowerCase(); }
+function appendEventRow(e){
+  const tbody=document.getElementById('eventsTbody'); const tr=document.createElement('tr');
+  tr.innerHTML = `<td>${e.started_at?new Date(e.started_at).toLocaleString():''}</td><td>${escapeHtml((cameras[e.camera_id]&&cameras[e.camera_id].name)||e.camera_id)}</td>
+    <td>${escapeHtml(e.event_type)}</td><td class="status-${e.risk_level==='high'?'error':e.risk_level==='medium'?'connecting':'online'}">${riskCls(e.risk_level)}</td><td>${e.status}</td>`;
+  tbody.appendChild(tr);
+}
+function prependEventRow(e, camId){
+  const tbody=document.getElementById('eventsTbody'); if(tbody.querySelector('.empty-state')) tbody.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.innerHTML = `<td>just now</td><td>${escapeHtml((cameras[camId]&&cameras[camId].name)||camId)}</td>
+    <td>${escapeHtml(e.event_type)}</td><td class="status-${e.risk_level==='high'?'error':e.risk_level==='medium'?'connecting':'online'}">${riskCls(e.risk_level)}</td><td>${e.status||'open'}</td>`;
+  tbody.prepend(tr);
+}
+
+/* =================================================================
+   Identities (Face Management)
+================================================================= */
+async function loadIdentities(){
+  try{ const data=await (await fetch(apiUrl('/api/v1/identities'))).json(); renderIdentities(data.identities||[]); }catch(e){}
+}
+async function reloadIdentities(){
+  try{ const data=await (await fetch(apiUrl('/api/v1/identities/reload'),{method:'POST'})).json();
+    renderIdentities(data.identities||[]); toast('Identities reloaded', `${data.identity_count} identities loaded.`, 'medium'); }
+  catch(e){ toast('Reload failed', String(e), 'medium'); }
+}
+function renderIdentities(list){
+  document.getElementById('identitiesChips').innerHTML = list.length ? list.map(n=>`<span class="chip known">👤 ${escapeHtml(n)}</span>`).join('') : '<span class="chip empty">No identities enrolled</span>';
+}
+function showFaceSub(name){
+  document.querySelectorAll('#view-identities .section-tab').forEach(t=>t.classList.toggle('active', t.dataset.sub===name));
+  document.getElementById('faceAddCard').style.display = name==='add' ? '' : 'none';
+  document.getElementById('faceManageCard').style.display = name==='manage' ? '' : 'none';
+}
+
+/* =================================================================
+   Complaints (local only)
+================================================================= */
+function saveComplaints(){ localStorage.setItem('nexgen_complaints', JSON.stringify(complaints)); }
+function renderComplaints(){
+  const tbody=document.getElementById('complaintsTbody');
+  if(!complaints.length){ tbody.innerHTML='<tr><td colspan="5" class="empty-state">No complaints yet.</td></tr>'; return; }
+  tbody.innerHTML = complaints.map(c=>`<tr>
+    <td>${c.id}</td><td>${escapeHtml(c.detail)}</td><td>${new Date(c.date).toLocaleDateString()}</td>
+    <td><span class="${c.status==='Resolved'?'status-online':'status-connecting'}">${c.status}</span></td>
+    <td><div class="btn-row">
+      ${c.status!=='Resolved'?`<button class="btn soft-green small" onclick="resolveComplaint(${c.id})">Mark resolved</button>`:''}
+      <button class="btn soft-pink small" onclick="removeComplaint(${c.id})">Remove</button>
+    </div></td></tr>`).join('');
+}
+function openNewComplaint(){
+  const detail = prompt('Describe the issue:'); if(!detail) return;
+  complaints.unshift({id: Date.now()%100000, detail, date: Date.now(), status:'In-progress'});
+  saveComplaints(); renderComplaints();
+}
+function resolveComplaint(id){ const c=complaints.find(x=>x.id===id); if(c) c.status='Resolved'; saveComplaints(); renderComplaints(); }
+function removeComplaint(id){ complaints = complaints.filter(x=>x.id!==id); saveComplaints(); renderComplaints(); }
+
+/* =================================================================
+   Settings sub-tabs
+================================================================= */
+function showSettingsSub(name){
+  document.querySelectorAll('#view-settings .section-tab').forEach(t=>t.classList.toggle('active', t.dataset.sub===name));
+  document.getElementById('settingsGeneralCard').style.display = name==='general' ? '' : 'none';
+  document.getElementById('settingsArmCard').style.display = name==='armunarm' ? '' : 'none';
+}
+
+/* =================================================================
+   Chat
+================================================================= */
+async function sendChat(){
+  const q=document.getElementById('chatInput').value.trim(); if(!q) return;
+  const camera_id=document.getElementById('chatCamera').value||null;
+  const minutes=parseInt(document.getElementById('chatMinutes').value||'60',10);
+  addChatMsg(q,'q'); document.getElementById('chatInput').value='';
+  try{
+    const res=await fetch(apiUrl('/api/v1/chat'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,camera_id,minutes})});
+    const data=await res.json(); addChatMsg(data.answer||JSON.stringify(data),'a');
+  }catch(e){ addChatMsg('Request failed: '+e,'a'); }
+}
+function addChatMsg(text,cls){
+  const log=document.getElementById('chatLog'); const el=document.createElement('div'); el.className='chat-msg '+cls; el.textContent=text;
+  log.appendChild(el); log.scrollTop=log.scrollHeight;
+}
+
+/* =================================================================
+   Nav / util
+================================================================= */
+function showView(name){
+  document.querySelectorAll('.nav-item').forEach(t=>t.classList.toggle('active', t.dataset.view===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+name));
+  document.getElementById('settingsSubnav').style.display = (name==='settings'||name==='chat') ? 'block' : 'none';
+}
+function closeModal(){ document.getElementById('modalBackdrop').classList.remove('show'); }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return escapeHtml(s); }
+
+document.getElementById('playerModal').addEventListener('click', (e)=>{ if(e.target.id==='playerModal') closePlayer(); });
+updateCfgPreview();
+</script>
+</body>
+</html>

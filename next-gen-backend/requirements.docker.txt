@@ -1,0 +1,15 @@
+# requirements.docker.txt
+
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy
+psycopg2-binary
+python-dotenv
+oss2
+dashscope
+opencv-python
+pillow
+numpy
+requests
+ultralytics

@@ -1,0 +1,17 @@
+# requirements.txt
+
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy
+psycopg2-binary
+python-dotenv
+oss2
+dashscope
+opencv-python
+pillow
+numpy
+torch
+torchvision
+facenet-pytorch
+ultralytics
