@@ -1,47 +1,109 @@
-// NOTE: These are temporary Figma-hosted asset URLs (expire ~7 days after export).
-// Before shipping to production, download these and move them into /public or /src/assets
-// and swap the imports below for local paths.
+// Local, self-contained assets. These used to be temporary Figma-hosted URLs
+// that expired a week after export; everything here is now either a file in
+// /public or an inline SVG, so the UI has no external image dependencies.
 
-export const logo = "https://www.figma.com/api/mcp/asset/016104ef-5632-4075-a4cf-0cdae0fce5bf.png";
+function icon(body, { stroke = "#4f4b61", fill = "none", width = 2 } = {}) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${fill}" stroke="${stroke}" ` +
+    `stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function image(svg) {
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+const NAVY = "#221f54";
+const RED = "#da3f3f";
+const GRAY = "#848295";
+
+const paths = {
+  video: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+  activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  alert:
+    '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  camera:
+    '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  faceId:
+    '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16c.8-1.6 2.3-2.4 4-2.4s3.2.8 4 2.4"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  sliders:
+    '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  radio: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="#ffffff"/>',
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  logout:
+    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  trash:
+    '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  chevronUp: '<polyline points="18 15 12 9 6 15"/>',
+  upload:
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  calendar:
+    '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  phone: '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+};
+
+export const logo = "/nexgen-logo.svg";
+export const loginLogo = "/nexgen-logo.svg";
 
 export const icons = {
-  liveStreaming: "https://www.figma.com/api/mcp/asset/52127bd8-c1f5-49d2-a89e-aa9c40f2675e.svg",
-  activity: "https://www.figma.com/api/mcp/asset/8fa1c1a4-d5f8-4c4f-9c7b-b9fe1412d930.svg",
-  breachAlert: "https://www.figma.com/api/mcp/asset/12a52c13-e89d-4b29-b78e-ceb75ff612c2.svg",
-  cameraManagement: "https://www.figma.com/api/mcp/asset/ad13546d-7efd-4b82-a35d-cc339dccecd3.svg",
-  faceId: "https://www.figma.com/api/mcp/asset/de76e59e-b1eb-44f8-ac80-763d6ddd512a.svg",
-  contact: "https://www.figma.com/api/mcp/asset/8effeb78-b885-4fed-ad74-842e3446626d.svg",
-  settings: "https://www.figma.com/api/mcp/asset/25f4b461-8853-4b23-a6f3-d65dba770cff.svg",
-  radioChecked: "https://www.figma.com/api/mcp/asset/e2bac7e3-0cef-48b1-87d7-998464eb996f.svg",
-  bell: "https://www.figma.com/api/mcp/asset/cd94e2be-1698-4aff-9cc6-b11a80b9b652.svg",
-  avatar: "https://www.figma.com/api/mcp/asset/86c89e5c-73f5-4919-9817-f72ff4ccef4e.svg",
-  logout: "https://www.figma.com/api/mcp/asset/baf14e27-4800-426e-a3fe-c6103e942168.svg",
-  viewCamera: "https://www.figma.com/api/mcp/asset/a280e645-cded-4f6d-8be3-eb2e28f54971.svg",
-  deleteIcon: "https://www.figma.com/api/mcp/asset/0db84ca8-4782-47e8-903e-4507c255f4b3.svg",
-  user: "https://www.figma.com/api/mcp/asset/1022508a-3c50-40cc-9ade-8d07f1171049.svg",
-  lock: "https://www.figma.com/api/mcp/asset/2b5cf902-1c41-4449-8420-986f9dedeefe.svg",
+  liveStreaming: icon(paths.video),
+  activity: icon(paths.activity),
+  breachAlert: icon(paths.alert),
+  cameraManagement: icon(paths.camera),
+  faceId: icon(paths.faceId),
+  contact: icon(paths.message),
+  settings: icon(paths.sliders),
+  radioChecked: icon(paths.radio, { stroke: "#ffffff" }),
+  bell: icon(paths.bell, { stroke: GRAY }),
+  avatar: icon(paths.user, { stroke: GRAY }),
+  logout: icon(paths.logout, { stroke: GRAY }),
+  viewCamera: icon(paths.eye, { stroke: "#ffffff" }),
+  deleteIcon: icon(paths.trash, { stroke: RED }),
+  user: icon(paths.user, { stroke: "#9c9c9c" }),
+  lock: icon(paths.lock, { stroke: "#9c9c9c" }),
 };
 
-export const loginHero =
-  "https://www.figma.com/api/mcp/asset/cccc9840-293d-4fcc-a88a-2b1ddf079eb3.png";
+// Photo used on the login / onboarding side panel.
+export const loginHero = "/login-hero.webp";
 
-export const loginLogo =
-  "https://www.figma.com/api/mcp/asset/d7b10e18-10cd-4c63-89aa-c066fda4ed30.png";
+export const logoIcon = "/nexgen-icon.svg";
 
-// Onboarding flow assets
 export const onboarding = {
-  logo: "https://www.figma.com/api/mcp/asset/a451f427-d1f8-492b-894a-b75fc7148e18.png",
-  lockActive: "https://www.figma.com/api/mcp/asset/bfd6c639-f532-414c-8120-3097d6f8ff32.svg",
-  lockInactive: "https://www.figma.com/api/mcp/asset/b9ce4b4f-5ecf-4665-bf6b-b2c8bcf61b18.svg",
-  cameraConfigActive: "https://www.figma.com/api/mcp/asset/cc775aa0-0c83-455e-bb0c-5627352d6f20.svg",
-  cameraConfigInactive: "https://www.figma.com/api/mcp/asset/a671b30d-8afc-46a6-8a8a-25c1cafa4193.svg",
-  faceId: "https://www.figma.com/api/mcp/asset/e70f021e-f3a9-4608-9f52-55f19d6b34eb.svg",
-  apiApp: "https://www.figma.com/api/mcp/asset/ebdc38b5-f26b-44b7-a29d-a60e34566d91.svg",
-  backArrow: "https://www.figma.com/api/mcp/asset/7083728d-5dfa-415f-a04e-dd893ce92daf.svg",
-  fieldLock: "https://www.figma.com/api/mcp/asset/43c493b9-6f9b-425f-8e40-bbef5f6c8488.svg",
-  uploadFile: "https://www.figma.com/api/mcp/asset/baa09f4d-5087-49bd-9f12-c4ba04434a67.svg",
-  calendar: "https://www.figma.com/api/mcp/asset/111acab5-1274-496b-94eb-5a6d4d40f8a2.svg",
-  qrCode: "https://www.figma.com/api/mcp/asset/739b0ac0-d4be-4a7f-9a57-6198c42c71b3.svg",
-  appStore: "https://www.figma.com/api/mcp/asset/23f66625-4557-4266-b2d7-ea2d671cf96a.png",
-  playStore: "https://www.figma.com/api/mcp/asset/138ce0a3-5aab-4a6f-aad8-e393029cc2ef.png",
+  logo: "/nexgen-logo.svg",
+  lockActive: icon(paths.lock, { stroke: NAVY }),
+  lockInactive: icon(paths.lock, { stroke: "#838386" }),
+  cameraConfigActive: icon(paths.camera, { stroke: NAVY }),
+  cameraConfigInactive: icon(paths.camera, { stroke: "#838386" }),
+  faceId: icon(paths.faceId, { stroke: NAVY }),
+  apiApp: icon(paths.phone, { stroke: NAVY }),
+  backArrow: icon(paths.chevronUp, { stroke: NAVY }),
+  fieldLock: icon(paths.lock, { stroke: "#9c9c9c" }),
+  uploadFile: icon(paths.upload, { stroke: "#606060" }),
+  calendar: icon(paths.calendar, { stroke: "#606060" }),
+  // There is no mobile app yet, so this is a labelled placeholder rather
+  // than a QR code that would scan to nothing.
+  qrCode: image(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <rect x="2" y="2" width="196" height="196" rx="12" fill="#fbfbfb" stroke="#e3e3e3" stroke-width="2" stroke-dasharray="8 6"/>
+      <g transform="translate(76 52) scale(2)" fill="none" stroke="${NAVY}" stroke-width="1.6" stroke-linecap="round">${paths.phone}</g>
+      <text x="100" y="138" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="${NAVY}">Mobile app</text>
+      <text x="100" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#838386">coming soon</text>
+    </svg>`
+  ),
+  appStore: storeBadge("App Store"),
+  playStore: storeBadge("Google Play"),
 };
+
+function storeBadge(name) {
+  return image(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56">
+      <rect width="200" height="56" rx="8" fill="#d9d9de"/>
+      <text x="100" y="24" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#6a6888">Coming soon to</text>
+      <text x="100" y="42" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#4f4b61">${name}</text>
+    </svg>`
+  );
+}

@@ -8,6 +8,9 @@ since on a live system the question an operator asks is "what happened on the
 lobby camera in the last hour", not "what is in this file".
 """
 
+import base64
+import binascii
+import io
 import json
 import logging
 from datetime import datetime, timedelta
@@ -17,7 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.schemas import ChatRequest
+from app.core.schemas import ChatRequest, IdentityEnroll
+from app.core.timeutil import iso_utc
 from app.db.models import Alert, Camera, Event
 from app.db.session import get_db
 from app.services import runtime
@@ -100,6 +104,72 @@ def reload_identities():
     }
 
 
+# Decoded size cap per enrollment photo.
+_MAX_ENROLL_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def _decode_image(value: str):
+    from PIL import Image
+
+    if value.startswith("data:") and "," in value:
+        value = value.split(",", 1)[1]
+
+    try:
+        raw = base64.b64decode(value, validate=False)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=422, detail="Image is not valid base64.")
+
+    if len(raw) > _MAX_ENROLL_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image is larger than 10 MB.")
+
+    try:
+        return Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=422, detail="Could not read image.")
+
+
+@router.post("/identities", status_code=201)
+def enroll_identity(payload: IdentityEnroll):
+    """
+    Enrolls a person from one or more photos. Enrolling an existing name adds
+    the new photos to it. Takes effect on running cameras immediately.
+    """
+    inference = runtime.get_inference()
+
+    if inference is None or not inference.face_available:
+        raise HTTPException(status_code=503, detail="Face module is not loaded.")
+
+    images = [_decode_image(value) for value in payload.images]
+
+    try:
+        report = inference.enroll_identity(payload.name, images)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    runtime.persist_identity_store()
+
+    return {
+        **report,
+        "identities": runtime.get_identity_store().list_identities(),
+    }
+
+
+@router.delete("/identities/{name}")
+def delete_identity(name: str):
+    inference = runtime.get_inference()
+
+    if inference is None or not inference.remove_identity(name):
+        raise HTTPException(status_code=404, detail="Identity not found")
+
+    runtime.persist_identity_store()
+
+    return {
+        "name": name,
+        "deleted": True,
+        "identities": runtime.get_identity_store().list_identities(),
+    }
+
+
 @router.post("/chat")
 def operator_chat(request: ChatRequest, db: Session = Depends(get_db)):
     qwen_client = runtime.get_qwen_client()
@@ -175,7 +245,7 @@ def _build_chat_context(
 
     context = {
         "camera_id": camera_id,
-        "window_start": cutoff.isoformat(),
+        "window_start": iso_utc(cutoff),
         "summary": _summarize(events, alerts),
         "events": [
             {
@@ -183,8 +253,8 @@ def _build_chat_context(
                 "camera_id": e.camera_id,
                 "event_type": e.event_type,
                 "risk_level": e.risk_level,
-                "started_at": e.started_at.isoformat() if e.started_at else None,
-                "ended_at": e.ended_at.isoformat() if e.ended_at else None,
+                "started_at": iso_utc(e.started_at),
+                "ended_at": iso_utc(e.ended_at),
                 "detection_count": e.detection_count,
                 "summary": e.summary,
             }
@@ -226,11 +296,12 @@ def _summarize(events, alerts) -> dict:
             [e for e in events if e.event_type == "unknown_face_detected"]
         ),
         "weapon_events": len(
-            [e for e in events if e.event_type.endswith("_detected")
-             and e.event_type not in (
-                 "known_face_detected",
-                 "unknown_face_detected",
-             )]
+            [e for e in events if e.event_type == "armed_unknown_person"
+             or (e.event_type.endswith("_detected")
+                 and e.event_type not in (
+                     "known_face_detected",
+                     "unknown_face_detected",
+                 ))]
         ),
         "total_alerts": len(alerts),
         "unacknowledged_alerts": len([a for a in alerts if not a.acknowledged]),

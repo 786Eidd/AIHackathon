@@ -1,18 +1,9 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import CameraForm from "../components/CameraForm";
+import DiscoveryPanel from "../components/DiscoveryPanel";
 import { useBackend } from "../context/BackendContext";
-
-function parseRtsp(url) {
-  // rtsp://user:pass@host:port/path — best-effort parse for the edit form.
-  try {
-    const u = new URL((url || "").replace(/^rtsp/, "http"));
-    return { ip: u.hostname, port: u.port || "554", user: u.username || "", pass: u.password || "", path: u.pathname || "/" };
-  } catch (e) {
-    return { ip: "", port: "554", user: "", pass: "", path: "/" };
-  }
-}
-
-const emptyForm = { name: "", location: "", ip: "", port: "554", user: "", pass: "", path: "/Streaming/Channels/101" };
+import { buildStreamUrl, emptyCameraForm, hostOf, parseStreamUrl, validateCameraForm } from "../lib/streamUrl";
 
 export default function CameraManagement() {
   const { cameras, createCamera, updateCamera, deleteCamera, cameraAction, pushToast } = useBackend();
@@ -22,7 +13,7 @@ export default function CameraManagement() {
   const [selectAll, setSelectAll] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(emptyCameraForm);
 
   useEffect(() => {
     setSelectAll(list.length > 0 && selected.size === list.length);
@@ -45,14 +36,13 @@ export default function CameraManagement() {
 
   function startAdd() {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(emptyCameraForm);
     setTab("config");
   }
 
   function startEdit(cam) {
-    const parsed = parseRtsp(cam.rtsp_url);
     setEditingId(cam.camera_id);
-    setForm({ name: cam.name || "", location: cam.location || "", ...parsed });
+    setForm({ ...parseStreamUrl(cam.rtsp_url), name: cam.name || "", location: cam.location || "" });
     setTab("config");
   }
 
@@ -81,12 +71,12 @@ export default function CameraManagement() {
 
   async function handleSave(e) {
     e.preventDefault();
-    if (!form.name.trim() || !form.ip.trim()) {
-      pushToast("Missing fields", "Name and IP are required.", "medium");
+    const problem = validateCameraForm(form);
+    if (problem) {
+      pushToast("Missing fields", problem, "medium");
       return;
     }
-    const auth = form.user ? `${form.user}:${form.pass}@` : "";
-    const rtsp_url = `rtsp://${auth}${form.ip}:${form.port || "554"}${form.path.startsWith("/") ? form.path : "/" + form.path}`;
+    const rtsp_url = buildStreamUrl(form);
 
     try {
       if (editingId) {
@@ -96,7 +86,7 @@ export default function CameraManagement() {
         await createCamera({ name: form.name, location: form.location || null, rtsp_url, enabled: true });
         pushToast("Camera added", form.name, "medium");
       }
-      setForm(emptyForm);
+      setForm(emptyCameraForm);
       setEditingId(null);
       setTab("list");
     } catch (e) {
@@ -104,18 +94,10 @@ export default function CameraManagement() {
     }
   }
 
-  function hostOf(url) {
-    try {
-      return new URL((url || "").replace(/^rtsp/, "http")).host;
-    } catch (e) {
-      return url || "—";
-    }
-  }
-
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-[71px] border-b border-[#e4e4e4] pb-2.5">
+        <div className="flex items-center gap-5 sm:gap-[71px] border-b overflow-x-auto whitespace-nowrap border-[#e4e4e4] pb-2.5">
           <button
             type="button"
             onClick={() => setTab("list")}
@@ -132,18 +114,34 @@ export default function CameraManagement() {
               tab === "config" ? "text-brand-navy font-medium border-brand-navy" : "text-[#4f4b61]/50 border-transparent"
             }`}
           >
-            Camera configuration
+            Add manually
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("discover")}
+            className={`text-[16px] tracking-[0.2px] pb-1 border-b-4 -mb-[13px] ${
+              tab === "discover" ? "text-brand-navy font-medium border-brand-navy" : "text-[#4f4b61]/50 border-transparent"
+            }`}
+          >
+            Auto-detect
           </button>
         </div>
 
-        {tab === "list" ? (
+        {tab === "discover" ? (
+          <div className="max-w-[860px]">
+            <DiscoveryPanel />
+          </div>
+        ) : tab === "list" ? (
           <>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <label className="flex items-center gap-2.5 text-[#5d5959] text-[14px] cursor-pointer">
                 <input type="checkbox" checked={selectAll} onChange={toggleAll} className="size-[15px] rounded-[3px] border border-[#dbdbdb]" />
                 Select All
               </label>
-              <div className="flex gap-[15px]">
+              <div className="flex gap-2 sm:gap-[15px] flex-wrap">
+                <button onClick={() => setTab("discover")} className="border border-brand-navy rounded-[5px] h-[31px] px-4 text-brand-navy text-[12px] font-medium">
+                  Auto-detect
+                </button>
                 <button onClick={startAdd} className="border border-[#dbdbdb] rounded-[5px] h-[31px] px-4 text-[#808080] text-[12px] font-medium">
                   Quick Add
                 </button>
@@ -173,7 +171,7 @@ export default function CameraManagement() {
                   {list.length === 0 && (
                     <tr>
                       <td colSpan={7} className="py-10 text-[#9c9c9c]">
-                        No cameras yet — use Quick Add.
+                        No cameras yet — use Auto-detect or Quick Add.
                       </td>
                     </tr>
                   )}
@@ -213,33 +211,9 @@ export default function CameraManagement() {
         ) : (
           <form onSubmit={handleSave} className="flex flex-col gap-6 max-w-[760px]">
             <p className="text-brand-navy text-[16px] font-semibold">{editingId ? "Edit camera" : "Add a camera"}</p>
-            <div className="grid grid-cols-2 gap-x-[18px] gap-y-[18px]">
-              <Field label="Name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="Enter name" />
-              <Field label="Location" value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v }))} placeholder="lab room e.g" />
-              <Field label="IP" value={form.ip} onChange={(v) => setForm((f) => ({ ...f, ip: v }))} placeholder="192.168.2.1 e.g" />
-              <Field label="Port" value={form.port} onChange={(v) => setForm((f) => ({ ...f, port: v }))} placeholder="554 e.g" />
-              <Field label="Username" value={form.user} onChange={(v) => setForm((f) => ({ ...f, user: v }))} placeholder="Enter username" />
-              <Field label="Password" type="password" value={form.pass} onChange={(v) => setForm((f) => ({ ...f, pass: v }))} placeholder="Enter password" />
-              <div className="flex flex-col gap-3 col-span-2">
-                <label className="text-brand-navy text-[16px] font-medium">Stream path</label>
-                <div className="bg-brand-field border border-brand-border rounded-[5px] h-[52px] flex items-center px-5">
-                  <input
-                    value={form.path}
-                    onChange={(e) => setForm((f) => ({ ...f, path: e.target.value }))}
-                    placeholder="/Streaming/Channels/101"
-                    className="bg-transparent outline-none flex-1 text-[14px] placeholder:text-[#c6c6c6]"
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="text-[11.5px] text-brand-gray">
-              Builds <code className="bg-[#f2f2f2] px-1 rounded">
-                rtsp://{form.user || "user"}:{form.pass ? "•••" : "pass"}@{form.ip || "ip"}:{form.port || "554"}
-                {form.path || "/Streaming/Channels/101"}
-              </code>
-            </p>
-            <div className="flex gap-4">
-              <button type="submit" className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[52px] w-[200px]">
+            <CameraForm form={form} setForm={setForm} />
+            <div className="flex gap-4 flex-wrap">
+              <button type="submit" className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[52px] w-full sm:w-[200px]">
                 Save
               </button>
               {editingId && (
@@ -247,7 +221,7 @@ export default function CameraManagement() {
                   type="button"
                   onClick={() => {
                     setEditingId(null);
-                    setForm(emptyForm);
+                    setForm(emptyCameraForm);
                   }}
                   className="border border-brand-navy text-brand-navy font-medium text-[14px] rounded-[5px] h-[52px] w-[160px]"
                 >
@@ -259,22 +233,5 @@ export default function CameraManagement() {
         )}
       </div>
     </DashboardLayout>
-  );
-}
-
-function Field({ label, value, onChange, placeholder, type = "text" }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <label className="text-brand-navy text-[16px] font-medium">{label}</label>
-      <div className="bg-brand-field border border-brand-border rounded-[5px] h-[52px] flex items-center px-5">
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="bg-transparent outline-none flex-1 text-[14px] placeholder:text-[#c6c6c6]"
-        />
-      </div>
-    </div>
   );
 }

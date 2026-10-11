@@ -28,6 +28,7 @@ from typing import Callable, Optional, Tuple
 import numpy as np
 
 from app.core.config import settings
+from app.core.timeutil import redact_url
 
 logger = logging.getLogger("nexgen.streaming.capture")
 
@@ -46,8 +47,9 @@ def _build_ffmpeg_options() -> str:
     be in the environment before the camera is opened, not merely before
     cv2 is imported.
 
-    `stimeout` is in microseconds and is what stops a dead camera from
-    hanging the reader thread forever.
+    `timeout` is the socket I/O timeout in microseconds (FFmpeg 5+; the old
+    `stimeout` name was removed) and is what stops a dead camera from hanging
+    the reader thread forever.
     """
     timeout_us = int(max(1.0, settings.stream_socket_timeout_seconds) * 1_000_000)
 
@@ -59,11 +61,21 @@ def _build_ffmpeg_options() -> str:
     return "|".join(
         [
             f"rtsp_transport;{transport}",
-            f"stimeout;{timeout_us}",
+            f"timeout;{timeout_us}",
             "max_delay;500000",
             "reorder_queue_size;0",
         ]
     )
+
+
+def webcam_index(stream_url: str) -> Optional[int]:
+    """Returns the device index for a webcam://N source, else None."""
+    value = (stream_url or "").strip().lower()
+
+    if value.startswith("webcam://") and value[9:].isdigit():
+        return int(value[9:])
+
+    return None
 
 
 class CameraCapture:
@@ -171,6 +183,14 @@ class CameraCapture:
                 self._latest_frame,
             )
 
+    def peek_latest(self) -> Optional[Tuple[int, np.ndarray]]:
+        """Like read_latest, but does not mark the frame as consumed."""
+        with self._lock:
+            if self._latest_frame is None:
+                return None
+
+            return self._frame_seq, self._latest_frame
+
     def stats(self) -> dict:
         with self._lock:
             last_frame_age = (
@@ -213,9 +233,30 @@ class CameraCapture:
         # OpenCV reads the FFmpeg options from the environment at this point.
         import cv2
 
-        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _build_ffmpeg_options()
+        device = webcam_index(self.stream_url)
 
-        capture = cv2.VideoCapture(self.stream_url, cv2.CAP_FFMPEG)
+        if device is not None:
+            # DirectShow opens far faster than the default MSMF backend on
+            # Windows; elsewhere let OpenCV pick.
+            backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+            capture = cv2.VideoCapture(device, backend)
+        else:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _build_ffmpeg_options()
+
+            # OpenCV's own watchdog defaults to 30s; align it with the
+            # configured socket timeout so a dead stream is noticed promptly.
+            timeout_ms = int(max(1.0, settings.stream_socket_timeout_seconds) * 1000)
+
+            capture = cv2.VideoCapture(
+                self.stream_url,
+                cv2.CAP_FFMPEG,
+                [
+                    cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
+                    timeout_ms,
+                    cv2.CAP_PROP_READ_TIMEOUT_MSEC,
+                    timeout_ms,
+                ],
+            )
 
         if not capture.isOpened():
             capture.release()
@@ -260,7 +301,7 @@ class CameraCapture:
 
                 self._set_status(
                     CaptureStatus.ERROR,
-                    f"Could not open stream: {self.stream_url}",
+                    f"Could not open stream: {redact_url(self.stream_url)}",
                 )
 
                 logger.warning(

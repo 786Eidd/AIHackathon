@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from app.integrations.qwen import QwenClient
 from app.pipelines.prompts import build_alert_prompt
+from app.pipelines.weapon_detector import LETHAL_CLASSES
 
 
 def _new_id(prefix: str) -> str:
@@ -46,10 +47,12 @@ def fuse_face_event(
     identity = track.get("identity_name", "unknown")
     status = track.get("status", "unknown")
 
+    # Only real weapons make an unknown person "armed"; someone near a pair
+    # of scissors is not.
     concurrent_weapons = [
         t.get("object_class")
         for t in (open_weapon_tracks or [])
-        if t.get("object_class")
+        if t.get("object_class") in LETHAL_CLASSES
     ]
 
     if status == "known":
@@ -74,14 +77,21 @@ def fuse_face_event(
             ),
         }
 
+    summary = (
+        f"Unrecognised person ({identity}) detected at "
+        f"{_format_time(track.get('first_seen'))}."
+    )
+
+    # The score is -1 when nobody is enrolled, which is noise, not evidence.
+    best_score = track.get("best_similarity_score") or 0.0
+
+    if best_score > 0:
+        summary += f" Closest enrolled match scored {best_score:.2f}."
+
     return {
         "event_type": "unknown_face_detected",
         "risk_level": "medium",
-        "summary": (
-            f"Unrecognised person ({identity}) detected at "
-            f"{_format_time(track.get('first_seen'))}. "
-            f"Best match score: {track.get('best_similarity_score', 0.0):.2f}."
-        ),
+        "summary": summary,
     }
 
 
@@ -113,12 +123,18 @@ def fuse_weapon_event(
     else:
         subject = "No associated face detected"
 
+    lethal = object_class in LETHAL_CLASSES
+    readable = object_class.replace("_", " ")
+
     return {
         "event_type": f"{object_class}_detected",
-        "risk_level": "high",
+        # A knife or gun is an emergency. A bat or scissors is usually
+        # innocent, so it asks for a look rather than a police call.
+        "risk_level": "high" if lethal else "medium",
         "summary": (
-            f"{object_class.capitalize()} detected at "
-            f"{_format_time(track.get('first_seen'))}. "
+            f"{readable.capitalize()} detected at "
+            f"{_format_time(track.get('first_seen'))}"
+            f"{'' if lethal else ' - this can be used as a weapon'}. "
             f"{subject}. "
             f"Detector confidence: {track.get('max_confidence', 0.0):.2f}."
         ),

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.schemas import CameraCreate, CameraUpdate
+from app.core.timeutil import iso_utc
 from app.db.models import Camera
 from app.db.session import get_db
 from app.services import runtime
@@ -38,10 +39,10 @@ def _serialize(camera: Camera, running: bool) -> dict:
         "status": camera.status,
         "running": running,
         "last_error": camera.last_error,
-        "last_frame_at": camera.last_frame_at,
+        "last_frame_at": iso_utc(camera.last_frame_at),
         "sample_fps": camera.sample_fps or settings.stream_sample_fps,
-        "created_at": camera.created_at,
-        "updated_at": camera.updated_at,
+        "created_at": iso_utc(camera.created_at),
+        "updated_at": iso_utc(camera.updated_at),
     }
 
 
@@ -180,6 +181,26 @@ def update_camera(
     camera = _get_camera(db, camera_id)
 
     updates = payload.model_dump(exclude_unset=True)
+
+    # These columns are NOT NULL; an explicit null means "leave unchanged".
+    for field in ("name", "rtsp_url", "enabled"):
+        if updates.get(field, "") is None:
+            del updates[field]
+
+    new_url = updates.get("rtsp_url")
+
+    if new_url and new_url != camera.rtsp_url:
+        clash = (
+            db.query(Camera)
+            .filter(Camera.rtsp_url == new_url, Camera.id != camera_id)
+            .first()
+        )
+
+        if clash is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Stream URL already registered to camera {clash.id}",
+            )
 
     # These are read when the threads are built, so they only take effect on
     # a restart of the pipeline.

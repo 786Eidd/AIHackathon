@@ -1,0 +1,4 @@
+# Shell scripts must keep Unix line endings or they fail on the Raspberry Pi.
+*.sh text eol=lf
+deploy/pi.env text eol=lf
+*.bat text eol=crlf

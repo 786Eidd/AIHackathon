@@ -63,6 +63,29 @@ class StreamManager:
 
         self._shutting_down = False
 
+        self._janitor_stop = threading.Event()
+        self._janitor = threading.Thread(
+            target=self._run_janitor,
+            name="artifact-janitor",
+            daemon=True,
+        )
+        self._janitor.start()
+
+    def _run_janitor(self) -> None:
+        """Keeps the local evidence folder from growing without bound."""
+        while not self._janitor_stop.is_set():
+            try:
+                removed = self._storage.prune_local_artifacts(
+                    settings.artifact_retention_days
+                )
+
+                if removed:
+                    logger.info(f"Pruned {removed} expired artifact file(s).")
+            except Exception as e:
+                logger.warning(f"Artifact pruning failed: {e}")
+
+            self._janitor_stop.wait(6 * 3600)
+
     # -----------------------------
     # Bulk lifecycle
     # -----------------------------
@@ -104,6 +127,7 @@ class StreamManager:
 
     def shutdown(self) -> None:
         self._shutting_down = True
+        self._janitor_stop.set()
 
         with self._lock:
             camera_ids = list(self._pipelines.keys())
@@ -115,6 +139,10 @@ class StreamManager:
                 logger.warning(f"Error stopping camera {camera_id}: {e}")
 
         self._qwen_executor.shutdown(wait=False, cancel_futures=True)
+
+        from app.streaming.visitors import get_visitor_gallery
+
+        get_visitor_gallery().flush()
 
         logger.info("Stream manager shut down.")
 
@@ -141,50 +169,64 @@ class StreamManager:
             if existing is not None and existing.capture.running:
                 return False
 
-            if (
-                existing is None
-                and len(self._pipelines) >= max(1, settings.max_cameras)
-            ):
-                raise RuntimeError(
-                    f"Camera limit reached ({settings.max_cameras}). "
-                    "Stop a camera or raise MAX_CAMERAS."
-                )
+            self._check_capacity(camera_id)
 
-            # Clean up a half-dead pipeline before replacing it.
-            if existing is not None:
-                existing.analyzer.stop()
-                existing.capture.stop()
+            stale = self._pipelines.pop(camera_id, None)
 
-            capture = CameraCapture(
-                camera_id=camera_id,
-                stream_url=stream_url,
-                on_status_change=lambda status, error: self._on_status_change(
-                    camera_id,
-                    camera_name,
-                    status,
-                    error,
-                ),
-            )
+        # Clean up a half-dead pipeline before replacing it. Done outside the
+        # lock: joining its threads can take many seconds and every status
+        # request would otherwise queue behind it.
+        if stale is not None:
+            stale.analyzer.stop()
+            stale.capture.stop()
 
-            analyzer = CameraAnalyzer(
-                camera_id=camera_id,
-                camera_name=camera_name,
-                capture=capture,
-                inference=self._inference,
-                storage=self._storage,
-                qwen_client=self._qwen,
-                qwen_executor=self._qwen_executor,
-                qwen_semaphore=self._qwen_semaphore,
-                sample_fps=sample_fps,
-            )
+        capture = CameraCapture(
+            camera_id=camera_id,
+            stream_url=stream_url,
+            on_status_change=lambda status, error: self._on_status_change(
+                camera_id,
+                camera_name,
+                status,
+                error,
+            ),
+        )
 
-            capture.start()
-            analyzer.start()
+        analyzer = CameraAnalyzer(
+            camera_id=camera_id,
+            camera_name=camera_name,
+            capture=capture,
+            inference=self._inference,
+            storage=self._storage,
+            qwen_client=self._qwen,
+            qwen_executor=self._qwen_executor,
+            qwen_semaphore=self._qwen_semaphore,
+            sample_fps=sample_fps,
+        )
+
+        with self._lock:
+            # A concurrent start for the same camera may have won the race.
+            if camera_id in self._pipelines:
+                return False
+
+            self._check_capacity(camera_id)
 
             self._pipelines[camera_id] = StreamPipeline(capture, analyzer)
 
+        capture.start()
+        analyzer.start()
+
         logger.info(f"Started camera {camera_id} ({camera_name}).")
         return True
+
+    def _check_capacity(self, camera_id: str) -> None:
+        if (
+            camera_id not in self._pipelines
+            and len(self._pipelines) >= max(1, settings.max_cameras)
+        ):
+            raise RuntimeError(
+                f"Camera limit reached ({settings.max_cameras}). "
+                "Stop a camera or raise MAX_CAMERAS."
+            )
 
     def stop_camera(self, camera_id: str) -> bool:
         with self._lock:
@@ -257,6 +299,30 @@ class StreamManager:
                 statuses.append(status)
 
         return statuses
+
+    def has_pipeline(self, camera_id: str) -> bool:
+        with self._lock:
+            return camera_id in self._pipelines
+
+    def latest_frame(self, camera_id: str):
+        """
+        Returns (frame_seq, frame, overlay) for the browser preview, or None
+        while the camera has not produced a frame yet.
+        """
+        with self._lock:
+            pipeline = self._pipelines.get(camera_id)
+
+        if pipeline is None:
+            return None
+
+        latest = pipeline.capture.peek_latest()
+
+        if latest is None:
+            return None
+
+        frame_seq, frame = latest
+
+        return frame_seq, frame, pipeline.analyzer.overlay()
 
     def recent_detections(self, camera_id: str, limit: int = 50) -> List[dict]:
         with self._lock:

@@ -1,41 +1,31 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import OnboardingSidebar from "../../components/OnboardingSidebar";
+import CameraForm from "../../components/CameraForm";
+import DiscoveryPanel from "../../components/DiscoveryPanel";
 import { useBackend } from "../../context/BackendContext";
-
-const fields = [
-  { key: "name", label: "Name", placeholder: "Enter name" },
-  { key: "location", label: "Location", placeholder: "lab room e.g" },
-  { key: "ip", label: "IP", placeholder: "192.168.2.1 e.g" },
-  { key: "port", label: "Port", placeholder: "554 e.g" },
-  { key: "username", label: "Username", placeholder: "Enter username" },
-  { key: "password", label: "Password", placeholder: "Enter password", type: "password" },
-];
+import { buildStreamUrl, emptyCameraForm, validateCameraForm } from "../../lib/streamUrl";
 
 export default function Step2CameraConfig() {
   const navigate = useNavigate();
   const { createCamera, pushToast } = useBackend();
-  const [values, setValues] = useState({ port: "554" });
+  const [form, setForm] = useState(emptyCameraForm);
   const [added, setAdded] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function update(key, value) {
-    setValues((v) => ({ ...v, [key]: value }));
-  }
-
   async function handleAddCamera(e) {
     e.preventDefault();
-    if (!values.name || !values.ip) {
-      pushToast("Missing fields", "Name and IP are required.", "medium");
+    const problem = validateCameraForm(form);
+    if (problem) {
+      pushToast("Missing fields", problem, "medium");
       return;
     }
-    const auth = values.username ? `${values.username}:${values.password || ""}@` : "";
-    const rtsp_url = `rtsp://${auth}${values.ip}:${values.port || "554"}/Streaming/Channels/101`;
     setSaving(true);
     try {
-      await createCamera({ name: values.name, location: values.location || null, rtsp_url, enabled: true });
+      await createCamera({ name: form.name, location: form.location || null, rtsp_url: buildStreamUrl(form), enabled: true });
       setAdded(true);
-      pushToast("Camera added", values.name, "medium");
+      pushToast("Camera added", form.name, "medium");
+      setForm(emptyCameraForm);
     } catch (e) {
       pushToast("Could not add camera", e.message, "medium");
     }
@@ -46,28 +36,21 @@ export default function Step2CameraConfig() {
     <div className="flex min-h-screen bg-white">
       <OnboardingSidebar currentStep={2} />
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-10 px-8">
-        <div className="flex flex-col items-center gap-2 w-[366px]">
+      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-5 sm:px-8 py-10">
+        <div className="flex flex-col items-center gap-2 w-full max-w-[480px]">
           <h1 className="text-brand-navy text-[32px] font-bold text-center">Camera configuration</h1>
-          <p className="text-[#474747] text-[14px] text-center">Add your first Hikvision-style RTSP camera (you can add more later).</p>
+          <p className="text-[#474747] text-[14px] text-center">Cameras on this network are found automatically. Connect them below, then continue.</p>
         </div>
 
+        <div className="w-full max-w-[560px]">
+          <DiscoveryPanel />
+        </div>
+
+        <p className="text-brand-navy text-[14px] font-semibold">Or add a camera by hand</p>
+
         <form onSubmit={handleAddCamera} className="flex flex-col items-center gap-[30px] w-full">
-          <div className="grid grid-cols-2 gap-x-[18px] gap-y-[18px] w-[518px]">
-            {fields.map((field) => (
-              <div key={field.key} className="flex flex-col gap-3">
-                <label className="text-brand-navy text-[16px] font-medium">{field.label}</label>
-                <div className="bg-brand-field border border-brand-border rounded-[5px] h-[52px] flex items-center px-5">
-                  <input
-                    type={field.type ?? "text"}
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => update(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    className="bg-transparent outline-none flex-1 text-[14px] placeholder:text-[#c6c6c6]"
-                  />
-                </div>
-              </div>
-            ))}
+          <div className="w-full max-w-[560px]">
+            <CameraForm form={form} setForm={setForm} />
           </div>
 
           <button
@@ -79,12 +62,12 @@ export default function Step2CameraConfig() {
           </button>
 
           {added && (
-            <div className="bg-[#deecff] text-brand-navy text-[14px] rounded-md py-3 px-4 w-[486px] flex items-center justify-center text-center">
-              Camera added and registered with the backend. You can add more later from Camera Management.
+            <div className="bg-[#deecff] text-brand-navy text-[14px] rounded-md py-3 px-4 w-full max-w-[486px] flex items-center justify-center text-center">
+              Camera added. Add another one above, or continue.
             </div>
           )}
 
-          <button type="button" onClick={() => navigate("/onboarding/3")} className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[56px] w-[200px]">
+          <button type="button" onClick={() => navigate("/onboarding/3")} className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[56px] w-full max-w-[200px]">
             Next
           </button>
         </form>

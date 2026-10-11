@@ -35,7 +35,7 @@ storage/models/*.onnx
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db
-*:Zone.Identifier
+*Zone.Identifier
 .vscode/
 .idea/
 
@@ -44,3 +44,9 @@ Thumbs.db
 
 # Local Cowork delivery folder (not part of the project)
 Claude outputs/
+
+# Runtime evidence (face crops, snapshots, clips) and local models
+next-gen-backend/storage/
+
+# Transfer package for the Raspberry Pi (contains enrolled faces)
+nexgen-pi.zip

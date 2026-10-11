@@ -9,22 +9,26 @@ function timeAgo(iso) {
 
 export default function BreachAlertRow({ name, message, ip, date, createdAt, thumbnail, acknowledged, onTakeAction }) {
   return (
-    <div className="bg-white border border-[#d9d9d9] min-h-[111px] flex items-center px-[28px] py-4 gap-10 flex-wrap">
-      <div className="flex items-center gap-4 w-[280px]">
+    <div className="bg-white border border-[#d9d9d9] min-h-[111px] flex items-center px-4 sm:px-[28px] py-4 gap-x-10 gap-y-3 flex-wrap">
+      <div className="flex items-center gap-4 w-full sm:w-[280px] min-w-0">
         <div className="h-[79px] w-[123px] rounded-[5px] bg-gray-200 overflow-hidden shrink-0">
           {thumbnail && <img src={thumbnail} alt={name} className="w-full h-full object-cover" />}
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5 min-w-0">
           <p className="text-brand-navy text-[16px] font-semibold">{name}</p>
           <p className="text-[#6a6888] text-[12px] font-medium">
             {acknowledged ? "Resolved" : `Triggered ${timeAgo(createdAt)}`}
           </p>
-          {message && <p className="text-[#a3a1b3] text-[11px] max-w-[240px] truncate">{message}</p>}
+          {message && (
+            <p className="text-[#a3a1b3] text-[11px] max-w-[240px] line-clamp-2" title={message}>
+              {message}
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="flex gap-16 items-center text-[#808080] text-[12px] w-[219px]">
-        <p>{ip}</p>
+      <div className="flex gap-6 sm:gap-16 items-center text-[#808080] text-[12px] sm:w-[219px]">
+        <p className="sm:flex-1">{ip}</p>
         <p>{date}</p>
       </div>
 

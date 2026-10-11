@@ -11,6 +11,7 @@ import FaceManagement from "./pages/FaceManagement";
 import Contact from "./pages/Contact";
 import Settings from "./pages/Settings";
 import CameraLiveView from "./pages/CameraLiveView";
+import Events from "./pages/Events";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/cameras" element={<LiveCameras />} />
         <Route path="/cameras/:id" element={<CameraLiveView />} />
         <Route path="/breach-alerts" element={<BreachAlerts />} />
+        <Route path="/events" element={<Events />} />
         <Route path="/camera-management" element={<CameraManagement />} />
         <Route path="/face-management" element={<FaceManagement />} />
         <Route path="/contact" element={<Contact />} />

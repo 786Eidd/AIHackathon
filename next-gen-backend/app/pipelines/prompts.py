@@ -67,6 +67,30 @@ Use this JSON schema:
 """
 
 
+APPEARANCE_PROMPT = """
+You are helping a security guard describe a person seen on a camera so that
+a colleague could recognise them.
+
+Describe only what is clearly visible:
+- clothing (type and colour of top, trousers, footwear if visible)
+- headwear, glasses, face covering, bag or anything carried
+- hair (length, colour) and facial hair
+- approximate build and height relative to the surroundings
+- what the person is doing
+
+Rules:
+- Do not guess the person's name, ethnicity, religion, nationality or mood.
+- Do not state an exact age; "adult" or "child" is enough.
+- If something is not visible, leave it out rather than guessing.
+- Two or three plain sentences. Return only valid JSON, no markdown.
+
+Use this JSON schema:
+{
+  "description": string
+}
+"""
+
+
 def build_alert_prompt(event: Dict[str, Any]) -> str:
     return f"""
 You are a security operations assistant.

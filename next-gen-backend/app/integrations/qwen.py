@@ -85,6 +85,11 @@ class QwenClient:
 
         status_code = getattr(response, "status_code", 200)
         if status_code != 200:
+            print(
+                f"[qwen] Request failed: status={status_code} "
+                f"code={getattr(response, 'code', None)} "
+                f"message={getattr(response, 'message', None)}"
+            )
             return None
 
         output = getattr(response, "output", None)

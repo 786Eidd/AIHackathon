@@ -11,15 +11,15 @@ export default function Step4MobileAccess() {
     <div className="flex min-h-screen bg-white">
       <OnboardingSidebar currentStep={4} />
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-10 px-8">
-        <div className="flex flex-col items-center gap-2 w-[502px]">
+      <div className="flex-1 flex flex-col items-center justify-center gap-10 px-5 sm:px-8 py-10">
+        <div className="flex flex-col items-center gap-2 w-full max-w-[502px]">
           <h1 className="text-brand-navy text-[32px] font-bold">Get access to you mobile</h1>
           <p className="text-[#474747] text-[14px] text-center">
             Please manage and control all in your mobile application
           </p>
         </div>
 
-        <div className="flex gap-[60px]">
+        <div className="flex gap-x-[60px] gap-y-3 flex-wrap justify-center">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <span
               className={`size-3.5 rounded-full inline-block ${
@@ -42,7 +42,7 @@ export default function Step4MobileAccess() {
 
         <div className="flex flex-col items-center gap-10">
           <img src={onboarding.qrCode} alt="Scan to connect mobile app" className="size-[200px]" />
-          <div className="flex gap-[43px]">
+          <div className="flex gap-x-[43px] gap-y-3 flex-wrap justify-center">
             <img src={onboarding.appStore} alt="Download on the App Store" className="h-14 w-[200px] object-cover rounded-md" />
             <img src={onboarding.playStore} alt="Get it on Google Play" className="h-14 w-[200px] object-cover rounded-md" />
           </div>
@@ -51,7 +51,7 @@ export default function Step4MobileAccess() {
         <button
           type="button"
           onClick={() => navigate("/cameras")}
-          className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[56px] w-[200px]"
+          className="bg-brand-red text-white font-bold text-[16px] rounded-[5px] h-[56px] w-full max-w-[200px]"
         >
           Get Started
         </button>

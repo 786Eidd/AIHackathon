@@ -12,13 +12,10 @@ class Settings(BaseSettings):
     device: str = "auto"
     log_level: str = "INFO"
     log_json: bool = True
-    cors_origins: str = "*"
+    # "lan" allows localhost and private-network origins, "*" allows any
+    # origin, anything else is a comma-separated allow list.
+    cors_origins: str = "lan"
 
-    qwen_max_retries: int = 3
-    qwen_retry_delay: float = 1.0
-
-    oss_max_retries: int = 3
-    oss_retry_delay: float = 1.0
     database_url: str = "sqlite:///./nexgen.db"
 
     storage_backend: str = "local"
@@ -41,8 +38,14 @@ class Settings(BaseSettings):
     weapon_model_path: str = "storage/models/weapon_detector.pt"
     weapon_model_oss_key: str = ""
 
-    weapon_confidence_threshold: float = 0.50
+    weapon_confidence_threshold: float = 0.40
     weapon_iou_threshold: float = 0.45
+
+    # Object detection is the most expensive step on a CPU, so it runs on a
+    # smaller image and only on every Nth analysed frame. Faces are still
+    # checked on every frame.
+    weapon_inference_size: int = 480
+    weapon_every_n_frames: int = 2
 
     # -----------------------------
     # Live streaming
@@ -54,10 +57,24 @@ class Settings(BaseSettings):
     max_cameras: int = 8
     auto_start_cameras: bool = True
 
-    # Frames per second actually handed to the detectors, per camera. The
-    # reader thread still consumes the stream at full rate — it just drops
-    # what the analyzer does not ask for.
-    stream_sample_fps: float = 3.0
+    # Plug-and-play: on boot, scan the local network and attached devices
+    # and register what is found. Recorders and IP cameras need a login, so
+    # they are only added unattended when a site-wide one is set here;
+    # otherwise they wait for it to be typed into the dashboard.
+    auto_discover_on_start: bool = True
+    camera_default_username: str = ""
+    camera_default_password: str = ""
+    discovery_max_channels: int = 16
+
+    # Set to the built dashboard (nextgen-frontend/dist) to serve the UI and
+    # the API from this one process, as the appliance does.
+    frontend_dist_dir: str = "../nextgen-frontend/dist"
+
+    # Upper bound on frames per second handed to the detectors, per camera.
+    # It is a ceiling, not a promise: when the hardware cannot keep up (more
+    # cameras, no GPU) each camera simply analyses as often as it gets a turn
+    # and the reader thread drops the frames in between.
+    stream_sample_fps: float = 8.0
 
     # Frames are downscaled to this width before inference and boxes are
     # scaled back to native coordinates. 0 disables downscaling. This is the
@@ -93,6 +110,17 @@ class Settings(BaseSettings):
     unknown_track_ttl_seconds: float = 120.0
 
     unknown_face_cluster_threshold: float = 0.56
+
+    # An unknown person returning after this long counts as a new visit.
+    visitor_revisit_gap_seconds: float = 600.0
+
+    # Evidence images are written at most this often per subject / camera,
+    # not once per analysed frame.
+    face_crop_interval_seconds: float = 5.0
+    annotated_frame_interval_seconds: float = 2.0
+
+    # Local artifacts older than this are deleted. 0 keeps everything.
+    artifact_retention_days: int = 7
 
     # Per-camera in-memory ring buffer of raw detections (not persisted).
     live_detection_buffer_size: int = 200

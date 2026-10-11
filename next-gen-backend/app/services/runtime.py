@@ -33,12 +33,15 @@ _inference: Optional[InferenceService] = None
 _stream_manager: Optional[StreamManager] = None
 
 
-def _load_identity_store(storage: StorageClient):
+def _load_identity_store(storage: StorageClient, force: bool = False):
     from app.face import IdentityStore
 
     try:
-        if settings.face_store_oss_key:
-            local_path = storage.download_to_cache(settings.face_store_oss_key)
+        if settings.face_store_oss_key and storage.bucket:
+            local_path = storage.download_to_cache(
+                settings.face_store_oss_key,
+                force=force,
+            )
 
             if Path(local_path).exists():
                 return IdentityStore.load(local_path)
@@ -131,12 +134,23 @@ def reload_identity_store():
     if _storage is None:
         init_runtime()
 
-    _identity_store = _load_identity_store(_storage)
+    _identity_store = _load_identity_store(_storage, force=True)
 
     if _inference is not None:
         _inference.swap_identity_store(_identity_store)
 
     return _identity_store
+
+
+def persist_identity_store() -> None:
+    """Writes the live store to disk (and OSS, when that is its source)."""
+    if _inference is None or _storage is None:
+        return
+
+    _inference.save_identity_store(settings.face_store_path)
+
+    if settings.face_store_oss_key and _storage.bucket:
+        _storage.save_file(settings.face_store_oss_key, settings.face_store_path)
 
 
 def get_storage() -> Optional[StorageClient]:

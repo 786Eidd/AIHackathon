@@ -20,7 +20,7 @@ COPY requirements.docker.txt /app/requirements.docker.txt
 RUN pip install --no-cache-dir -r /app/requirements.docker.txt
 
 # Install facenet-pytorch without forcing torch/torchvision reinstall.
-RUN pip install --no-cache-dir --no-deps facenet-pytorch
+RUN pip install --no-cache-dir --no-deps facenet-pytorch==2.5.3
 
 COPY app /app/app
 COPY scripts /app/scripts

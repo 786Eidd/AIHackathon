@@ -215,10 +215,53 @@ Vite prints a local URL (typically `http://localhost:5173`). On the Login
 screen, confirm the **Backend URL** field points at your backend
 (`http://localhost:8000` by default).
 
-### 3. Register a camera
+On Windows, `start-backend.bat` and `start-frontend.bat` in the repository
+root do both steps (and install dependencies on first run).
+`start-backend.bat lan` additionally exposes the API to your local network.
 
-Cameras aren't configured via `.env` — register them over the API (or from
-the Camera Management screen in the dashboard):
+### Running as a single appliance (edge device)
+
+`build-dashboard.bat` (or `npm run build` in `nextgen-frontend`) produces
+`nextgen-frontend/dist`. When that folder exists the backend serves the
+dashboard itself, so the whole system is one process on one port — start it
+with `start-backend.bat lan` and open `http://<device-ip>:8000` from any
+phone or PC on the network.
+
+### 3. Connect cameras
+
+**Automatic.** On every boot the backend scans the network it is plugged into
+and the devices attached to it:
+
+| Found | How | Connected |
+|---|---|---|
+| IP cameras, NVRs, DVRs | RTSP on ports 554 / 8554, named via ONVIF | after their login is entered once in **Camera Management → Auto-detect**; every channel that is delivering video is added |
+| Phone camera apps | DroidCam (4747), IP Webcam (8080) | automatically |
+| Webcams on the device | capture devices 0–3 | automatically |
+
+For a fully unattended install, put the site's camera login in
+`next-gen-backend/.env` and recorders are connected on boot too:
+
+```
+CAMERA_DEFAULT_USERNAME=admin
+CAMERA_DEFAULT_PASSWORD=...
+```
+
+Set `AUTO_DISCOVER_ON_START=false` to turn the boot scan off.
+
+**Manual.** Open **Camera Management → Add manually** and pick a source:
+
+| Source | What to enter | Resulting URL |
+|---|---|---|
+| **Hikvision (RTSP)** | IP, login, channel, main/sub stream | `rtsp://user:pass@ip:554/Streaming/Channels/102` |
+| **This PC's webcam** | Device number (0 = built-in) | `webcam://0` |
+| **Mobile phone** | IP shown by the Android *IP Webcam* app | `http://ip:8080/video` |
+| **Custom URL** | Any RTSP / HTTP / RTMP stream | as typed |
+
+On a Hikvision NVR/DVR every camera is a channel: channel 1 sub stream is
+`102`, channel 2 is `202`, and so on. The sub stream is recommended on a
+CPU-only machine.
+
+The same thing over the API:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/cameras \
@@ -231,12 +274,22 @@ curl -X POST http://localhost:8000/api/v1/cameras \
       }'
 ```
 
-### 4. Enroll faces (optional, offline)
+### 4. Enroll faces
 
-Face recognition needs an identity store built from reference photos —
-see [`face-embedder/face-embedder-2/README.md`](face-embedder/face-embedder-2/README.md)
-and the backend's [Enrolling faces](next-gen-backend/README.md#enrolling-faces)
-section.
+Open **Face Management**, enter a name and add 3–5 photos — uploaded, taken
+with the camera of the device you are using, or captured from any connected
+camera. Enrollment takes
+effect on running cameras immediately and is saved to
+`storage/models/identity_store.pkl`. Bulk/offline enrollment from photo
+folders is still available — see
+[`face-embedder/face-embedder-2/README.md`](face-embedder/face-embedder-2/README.md).
+
+### 5. Weapon model
+
+Weapon detection needs a YOLO weights file at
+`next-gen-backend/storage/models/weapon_detector.pt` whose class names include
+knife / gun / pistol / rifle. Without it the backend runs face recognition
+only, and `/health` reports `weapon_model_loaded: false`.
 
 ## Alibaba Cloud integration
 
@@ -263,7 +316,10 @@ Base path: `/api/v1`. Full reference in
 | `GET` | `/cameras/status` | Live pipeline telemetry (FPS, drops, reconnects) |
 | `GET` | `/events` | Filterable event history |
 | `GET` | `/alerts` · `POST /alerts/{id}/ack` | Alerts + acknowledgement |
-| `GET`/`POST` | `/identities` · `/identities/reload` | Enrolled identities |
+| `GET`/`POST`/`DELETE` | `/identities` · `/identities/{name}` · `/identities/reload` | Enrolled identities |
+| `POST` | `/discovery/scan` · `/discovery/connect` | Find and connect cameras on the network |
+| `GET` | `/cameras/{id}/stream.mjpg` · `/snapshot.jpg` | Live preview for the browser |
+| `GET` | `/artifacts/{path}` | Stored snapshots and clips |
 | `POST` | `/chat` | Ask about recent activity (requires DashScope key) |
 | `WS` | `/ws/live` | Real-time push: detections, events, alerts, camera status |
 
@@ -272,12 +328,13 @@ Base path: `/api/v1`. Full reference in
 The frontend is honest about what the backend can actually do — nothing is
 silently faked:
 
-- **Fully live**: camera list/status, live detection chips, breach alerts +
-  acknowledgement, camera CRUD, identity list + reload, `/health` telemetry,
-  arm/unarm.
-- **Intentionally not wired** (no backend endpoint exists yet): face-photo
-  upload (enrollment is an offline script, see above), complaint ticketing
-  (kept in `localStorage` only), and login (the backend has no
+- **Fully live**: live video with detection boxes (MJPEG), camera thumbnails,
+  camera list/status, detection chips, breach alerts + acknowledgement,
+  event history with snapshots and evidence clips, the Qwen assistant, camera
+  CRUD, face enrollment/removal, `/health` telemetry, arm/unarm.
+- **Intentionally not wired** (no backend endpoint exists yet): complaint
+  ticketing (kept in `localStorage` only), the "Create Panic" button, the
+  onboarding password step, the mobile app, and login (the backend has no
   authentication — see Security notes).
 
 ## Security notes
@@ -285,7 +342,9 @@ silently faked:
 Read before exposing this beyond a local demo:
 
 - **No authentication** — every endpoint, including camera CRUD, is open.
-- **CORS defaults to `*`** — restrict `CORS_ORIGINS` in production.
+- **CORS defaults to `lan`** — browsers are only allowed in from localhost and
+  private-network origins. That stops a random website from reading the API,
+  but anything on your network can still call it directly.
 - **RTSP credentials are stored in plaintext** and echoed back by the camera
   endpoints.
 - The identity store is a **pickle file** — only load ones you generated.

@@ -1,6 +1,8 @@
 # app/integrations/storage.py
 
+import os
 import shutil
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -72,17 +74,72 @@ class StorageClient:
         if local_path.resolve() != path.resolve():
             shutil.copyfile(local_path, path)
 
-    def download_to_cache(self, key: str) -> Path:
+    def download_to_cache(self, key: str, force: bool = False) -> Path:
+        """
+        `force` re-fetches an object that is already cached. Without it a
+        re-uploaded identity store would never be picked up.
+        """
         if not self.bucket:
             return self._local_path(key)
 
         cache_path = self._cache_path(key)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if not cache_path.exists():
-            self.bucket.get_object_to_file(key, str(cache_path))
+        if force or not cache_path.exists():
+            tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+            self.bucket.get_object_to_file(key, str(tmp_path))
+            os.replace(tmp_path, cache_path)
 
         return cache_path
+
+    def public_url(self, key: Optional[str]) -> Optional[str]:
+        """
+        A reference a browser can load: a signed URL on OSS, otherwise a path
+        served by the API's /artifacts route (relative to the API origin).
+        """
+        if not key:
+            return None
+
+        if self.bucket:
+            return self.bucket.sign_url(
+                "GET",
+                key,
+                self.settings.artifact_url_expires,
+            )
+
+        if key.startswith("artifacts/"):
+            return f"/api/v1/{key}"
+
+        return None
+
+    def local_artifact_path(self, relative: str) -> Optional[Path]:
+        """Resolves an /artifacts request, refusing anything outside the tree."""
+        root = (Path(self.settings.local_storage_dir) / "artifacts").resolve()
+        path = (root / relative).resolve()
+
+        if root not in path.parents or not path.is_file():
+            return None
+
+        return path
+
+    def prune_local_artifacts(self, max_age_days: int) -> int:
+        """Deletes local evidence files older than the retention window."""
+        if self.bucket or max_age_days <= 0:
+            return 0
+
+        root = Path(self.settings.local_storage_dir) / "artifacts"
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+
+        for path in root.rglob("*"):
+            try:
+                if path.is_file() and path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    removed += 1
+            except OSError:
+                continue
+
+        return removed
 
     def get_local_path(self, key: str) -> Path:
         return self.download_to_cache(key)
@@ -104,9 +161,6 @@ class StorageClient:
             returns file:// URI
         """
         if self.bucket:
-            if not self.bucket.object_exists(key):
-                return None
-
             return self.bucket.sign_url(
                 "GET",
                 key,

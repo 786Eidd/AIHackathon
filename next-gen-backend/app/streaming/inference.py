@@ -64,6 +64,62 @@ class InferenceService:
 
             return len(self._identity_store.list_identities())
 
+    def enroll_identity(self, name: str, images: list) -> dict:
+        """
+        Embeds each PIL image (most confident face wins) and adds the vectors
+        to the live store, so running cameras recognise the person on their
+        next frame.
+        """
+        if not self.face_available:
+            raise RuntimeError("Face module is not loaded.")
+
+        embeddings = []
+
+        for image in images:
+            with self._gpu_semaphore:
+                with self._face_lock:
+                    faces = self._face_embedder.detect_and_embed(image)
+
+            if not faces:
+                continue
+
+            embeddings.append(max(faces, key=lambda face: face[2])[1])
+
+        if not embeddings:
+            raise ValueError("No face could be detected in the supplied photos.")
+
+        with self._identity_lock:
+            self._identity_store.add_identity(name, embeddings)
+
+        return {
+            "name": name,
+            "photos_received": len(images),
+            "photos_used": len(embeddings),
+        }
+
+    def remove_identity(self, name: str) -> bool:
+        with self._identity_lock:
+            if (
+                self._identity_store is None
+                or name not in self._identity_store.embeddings
+            ):
+                return False
+
+            self._identity_store.delete_identity(name)
+            return True
+
+    def save_identity_store(self, path) -> None:
+        import os
+        from pathlib import Path
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+
+        with self._identity_lock:
+            self._identity_store.save(tmp_path)
+            os.replace(tmp_path, path)
+
     @property
     def face_available(self) -> bool:
         return self._face_embedder is not None and self._identity_store is not None

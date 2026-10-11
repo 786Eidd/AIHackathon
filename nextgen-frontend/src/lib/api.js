@@ -12,6 +12,29 @@ export function wsUrl(base) {
   return `${scheme}//${u.host}/api/v1/ws/live`;
 }
 
+// Snapshot/clip references are absolute (OSS signed URL) or relative to the
+// API origin (locally stored artifacts).
+export function mediaUrl(base, ref) {
+  if (!ref) return null;
+  return ref.startsWith("/") ? apiUrl(base, ref) : ref;
+}
+
+export function snapshotUrl(base, cameraId, width = 0, cacheKey = 0, overlay = true) {
+  return apiUrl(base, `/api/v1/cameras/${cameraId}/snapshot.jpg?width=${width}&overlay=${overlay}&_=${cacheKey}`);
+}
+
+export function streamUrl(base, cameraId, width = 960, fps = 10) {
+  return apiUrl(base, `/api/v1/cameras/${cameraId}/stream.mjpg?width=${width}&fps=${fps}`);
+}
+
+function describeError(data, res) {
+  const detail = data && data.detail;
+  if (typeof detail === "string") return detail;
+  // FastAPI validation errors arrive as a list of {loc, msg}.
+  if (Array.isArray(detail)) return detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+  return res.statusText || `HTTP ${res.status}`;
+}
+
 async function req(base, path, opts = {}) {
   const res = await fetch(apiUrl(base, path), {
     headers: opts.body ? { "Content-Type": "application/json" } : undefined,
@@ -25,7 +48,7 @@ async function req(base, path, opts = {}) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const err = new Error(data.detail || res.statusText || `HTTP ${res.status}`);
+    const err = new Error(describeError(data, res));
     err.data = data;
     err.status = res.status;
     throw err;
@@ -52,6 +75,17 @@ export const api = {
 
   listIdentities: (base) => req(base, "/api/v1/identities"),
   reloadIdentities: (base) => req(base, "/api/v1/identities/reload", { method: "POST" }),
+  enrollIdentity: (base, name, images) => req(base, "/api/v1/identities", { method: "POST", body: JSON.stringify({ name, images }) }),
+  deleteIdentity: (base, name) => req(base, `/api/v1/identities/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
+  discoveryDevices: (base) => req(base, "/api/v1/discovery/devices"),
+  discoveryScan: (base) => req(base, "/api/v1/discovery/scan", { method: "POST" }),
+  discoveryConnect: (base, body) => req(base, "/api/v1/discovery/connect", { method: "POST", body: JSON.stringify(body) }),
+
+  panic: (base, note) => req(base, "/api/v1/panic", { method: "POST", body: JSON.stringify({ note: note || null }) }),
+
+  getSite: (base) => req(base, "/api/v1/site"),
+  saveSite: (base, body) => req(base, "/api/v1/site", { method: "PUT", body: JSON.stringify(body) }),
 
   chat: (base, body) => req(base, "/api/v1/chat", { method: "POST", body: JSON.stringify(body) }),
 };

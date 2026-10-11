@@ -33,6 +33,8 @@ logger = logging.getLogger("nexgen.streaming.clips")
 # frame is ~6MB, so this caps one camera's buffer at roughly 750MB worst case.
 _MAX_BUFFERED_FRAMES = 120
 
+_MAX_CLIP_WIDTH = 960
+
 
 class FrameRingBuffer:
     """Rolling pre-event frame history for one camera."""
@@ -44,11 +46,27 @@ class FrameRingBuffer:
         self._frames: Deque[Tuple[float, np.ndarray]] = deque(maxlen=capacity)
         self._lock = threading.Lock()
 
-    def add(self, timestamp: float, frame: np.ndarray) -> None:
+    def add(self, timestamp: float, frame: np.ndarray) -> np.ndarray:
         # Copied because the capture layer hands out its live slot by
         # reference and will overwrite it on the next decoded frame.
+        # Evidence clips do not need full camera resolution, and at a few
+        # megabytes per 1080p frame the pre-roll would dominate memory.
+        if frame.shape[1] > _MAX_CLIP_WIDTH:
+            import cv2
+
+            scale = _MAX_CLIP_WIDTH / float(frame.shape[1])
+            owned = cv2.resize(
+                frame,
+                (_MAX_CLIP_WIDTH, max(1, int(round(frame.shape[0] * scale)))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            owned = frame.copy()
+
         with self._lock:
-            self._frames.append((timestamp, frame.copy()))
+            self._frames.append((timestamp, owned))
+
+        return owned
 
     def snapshot(self) -> List[Tuple[float, np.ndarray]]:
         with self._lock:
@@ -105,7 +123,9 @@ class ClipRecorder:
             self.finalize()
             return False
 
-        self._frames.append(frame.copy())
+        # The analyzer's ring buffer already owns a private copy of this
+        # frame, so recorders share it instead of copying again.
+        self._frames.append(frame)
 
         if timestamp - self.started_at >= self.post_seconds:
             self.finalize()
@@ -144,14 +164,14 @@ class ClipRecorder:
             # VideoWriter needs a real filesystem path, so encode to temp and
             # hand the finished file to the storage client (which may be OSS).
             with tempfile.NamedTemporaryFile(
-                suffix=".mp4",
+                suffix=".webm",
                 delete=False,
             ) as handle:
                 temp_path = Path(handle.name)
 
             writer = cv2.VideoWriter(
                 str(temp_path),
-                cv2.VideoWriter_fourcc(*"mp4v"),
+                cv2.VideoWriter_fourcc(*"VP80"),
                 self.playback_fps,
                 (width, height),
             )

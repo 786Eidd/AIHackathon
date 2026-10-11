@@ -27,7 +27,19 @@ def normalize_weapon_name(name: str) -> Optional[str]:
     ):
         return "firearm"
 
+    # Everyday objects that are only sometimes a threat. Reported at a lower
+    # priority than a real weapon.
+    if "baseball bat" in n or n == "bat":
+        return "baseball_bat"
+
+    if "scissors" in n:
+        return "scissors"
+
     return None
+
+
+# Classes that are an emergency on sight, as opposed to "worth a look".
+LETHAL_CLASSES = ("knife", "firearm")
 
 
 class WeaponDetector:
@@ -36,6 +48,7 @@ class WeaponDetector:
         self.storage = storage
         self.model = None
         self.names: Dict[int, str] = {}
+        self.weapon_class_ids: List[int] = []
         self._load_model()
 
     @property
@@ -74,7 +87,23 @@ class WeaponDetector:
             else:
                 self.names = {}
 
-            print(f"[weapon] Model classes: {self.names}")
+            # A general-purpose model (e.g. COCO) has dozens of classes we
+            # never report; telling the model which ones matter lets it skip
+            # the rest instead of us discarding them afterwards.
+            self.weapon_class_ids = [
+                class_id
+                for class_id, name in self.names.items()
+                if normalize_weapon_name(name)
+            ]
+
+            print(
+                "[weapon] Reporting classes: "
+                f"{[self.names[i] for i in self.weapon_class_ids]}"
+            )
+
+            if not self.weapon_class_ids:
+                print("[weapon] Model has no weapon classes; detection disabled.")
+                self.model = None
 
         except Exception as e:
             print(f"[weapon] Failed to load weapon model: {e}")
@@ -97,6 +126,8 @@ class WeaponDetector:
                 conf=confidence_threshold,
                 iou=iou_threshold,
                 device=device,
+                classes=self.weapon_class_ids,
+                imgsz=self.settings.weapon_inference_size,
                 verbose=False,
             )
 

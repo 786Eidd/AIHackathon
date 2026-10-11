@@ -38,7 +38,7 @@ if _is_sqlite:
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")
-            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA busy_timeout=15000")
         finally:
             cursor.close()
 

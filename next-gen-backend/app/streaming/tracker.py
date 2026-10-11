@@ -213,7 +213,9 @@ class LiveEventTracker:
                     # frame, so the evidence attached to the event is the
                     # clearest one rather than merely the first.
                     if payload[score_field] > existing["payload"][score_field]:
-                        existing["payload"].update(payload)
+                        existing["payload"].update(
+                            {k: v for k, v in payload.items() if v is not None}
+                        )
 
                     return None, None
 

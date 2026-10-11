@@ -78,7 +78,9 @@ class Event(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
 
-    camera_id: Mapped[str] = mapped_column(ForeignKey("cameras.id"), index=True)
+    # Deliberately not a foreign key: events are kept after their camera is
+    # deleted, which a real FK would reject on PostgreSQL.
+    camera_id: Mapped[str] = mapped_column(String(64), index=True)
 
     event_type: Mapped[str] = mapped_column(String(128), index=True)
 

@@ -620,11 +620,11 @@ function renderCameraTable(){
     const thumb = snapUrl ? `<img class="thumb" src="${escapeAttr(snapUrl)}" onerror="this.outerHTML='<div class=thumb-ph>📷</div>'" />` : `<div class="thumb-ph">📷</div>`;
     const chips = [
       ...det.faces.map(f=>{const known=f.identity_name && f.identity_name!=='unknown'; return `<span class="chip ${known?'known':'unknown'}">👤 ${escapeHtml(f.identity_name||'unknown')}</span>`;}),
-      ...det.weapons.map(w=>`<span class="chip weapon">⚠ ${escapeHtml(w.label||w.class||'weapon')}</span>`)
+      ...det.weapons.map(w=>`<span class="chip weapon">⚠ ${escapeHtml(w.object_class||w.label||'weapon')}</span>`)
     ].join('') || '';
     return `<tr>
       <td>${thumb}</td>
-      <td><div class="cell-strong">${escapeHtml(c.name||id)}</div><div class="cell-sub">${hostOf(c.rtsp_url)}</div>${chips?`<div class="chips" style="margin-top:6px;">${chips}</div>`:''}</td>
+      <td><div class="cell-strong">${escapeHtml(c.name||id)}</div><div class="cell-sub">${escapeHtml(hostOf(c.rtsp_url))}</div>${chips?`<div class="chips" style="margin-top:6px;">${chips}</div>`:''}</td>
       <td>${escapeHtml(c.location||'—')}</td>
       <td><span class="status-${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span>${c.last_error?`<div class="cell-sub" style="color:var(--red);">⚠ ${escapeHtml(c.last_error)}</div>`:''}</td>
       <td><div class="btn-row">
@@ -716,7 +716,7 @@ function renderCamMgmtTable(){
     const c=cameras[id]; const status=(c.status||'offline').toLowerCase();
     return `<tr>
       <td class="cell-strong">${escapeHtml(c.name||id)}</td>
-      <td>${hostOf(c.rtsp_url)}</td>
+      <td>${escapeHtml(hostOf(c.rtsp_url))}</td>
       <td>${c.sample_fps ?? '—'}</td>
       <td><span class="status-${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span></td>
       <td>${escapeHtml(c.location||'—')}</td>
@@ -775,7 +775,7 @@ function renderPlayerDetects(id){
   const det = camDetections[id]||{faces:[],weapons:[]};
   const chips=[
     ...det.faces.map(f=>{const known=f.identity_name && f.identity_name!=='unknown'; return `<span class="chip ${known?'known':'unknown'}" style="color:#fff;background:${known?'#1fae5d':'#e0a020'};">👤 ${escapeHtml(f.identity_name||'unknown')}</span>`;}),
-    ...det.weapons.map(w=>`<span class="chip weapon" style="color:#fff;background:#db4b41;">⚠ ${escapeHtml(w.label||w.class||'weapon')}</span>`)
+    ...det.weapons.map(w=>`<span class="chip weapon" style="color:#fff;background:#db4b41;">⚠ ${escapeHtml(w.object_class||w.label||'weapon')}</span>`)
   ].join('') || '<span class="chip empty" style="color:#8890a6;">No detections yet</span>';
   const el=document.getElementById('playerDetects'); if(el) el.innerHTML = chips;
 }

@@ -1,17 +1,22 @@
 # requirements.txt
+#
+# Pinned to the set this project was last verified with (Python 3.11).
+# facenet-pytorch is held at 2.5.3 on purpose: 2.6+ pins torch<2.3 and
+# conflicts with the torch that ultralytics needs.
 
-fastapi
-uvicorn[standard]
-pydantic-settings
-sqlalchemy
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic-settings==2.15.0
+sqlalchemy==2.0.52
 psycopg2-binary
-python-dotenv
-oss2
-dashscope
-opencv-python
-pillow
-numpy
-torch
-torchvision
-facenet-pytorch
-ultralytics
+python-dotenv==1.2.3
+oss2==2.19.1
+dashscope==1.27.4
+opencv-python==5.0.0.93
+pillow==12.3.0
+numpy==2.4.6
+torch==2.14.0
+torchvision==0.29.0
+facenet-pytorch==2.5.3
+ultralytics==8.4.142
+httpx==0.28.1

@@ -30,10 +30,16 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from app.core.config import settings
+from app.core.timeutil import iso_utc
 from app.db.models import Alert, Event
 from app.db.session import SessionLocal
 from app.pipelines import fusion_engine
-from app.pipelines.prompts import FRAME_ANALYSIS_PROMPT, TEMPORAL_EVENT_PROMPT
+from app.pipelines.appearance import clothing_colour, describe_unknown
+from app.pipelines.prompts import (
+    APPEARANCE_PROMPT,
+    FRAME_ANALYSIS_PROMPT,
+    TEMPORAL_EVENT_PROMPT,
+)
 from app.streaming.broadcaster import broadcaster
 from app.streaming.capture import CameraCapture
 from app.streaming.clips import (
@@ -42,7 +48,8 @@ from app.streaming.clips import (
     clip_playback_fps,
     clips_enabled,
 )
-from app.streaming.tracker import LiveEventTracker, UnknownFaceClusterer
+from app.streaming.tracker import LiveEventTracker
+from app.streaming.visitors import get_visitor_gallery
 
 logger = logging.getLogger("nexgen.streaming.analyzer")
 
@@ -138,7 +145,7 @@ class CameraAnalyzer:
             self.sample_fps = 1.0
 
         self._tracker = LiveEventTracker(camera_id)
-        self._clusterer = UnknownFaceClusterer()
+        self._visitors = get_visitor_gallery()
 
         self._ring_buffer = FrameRingBuffer(
             settings.clip_pre_seconds,
@@ -153,6 +160,17 @@ class CameraAnalyzer:
         self._detection_lock = threading.Lock()
 
         self._alert_cooldowns: Dict[str, float] = {}
+        self._alert_lock = threading.Lock()
+
+        # Evidence throttles: last save time per face label, and the last
+        # annotated weapon frame.
+        self._crop_saved_at: Dict[str, float] = {}
+        self._last_annotated: tuple = (0.0, None, None)
+        self._last_weapons: tuple = (0.0, [])
+
+        # (timestamp, faces, weapons) from the newest analysed frame, drawn
+        # onto the browser preview.
+        self._overlay: Optional[tuple] = None
         self._last_scene_check = 0.0
 
         self._stop_event = threading.Event()
@@ -210,7 +228,7 @@ class CameraAnalyzer:
             "sample_fps": self.sample_fps,
             "frames_analyzed": self._frames_analyzed,
             "open_tracks": len(self._tracker.snapshot()),
-            "unknown_tracks": self._clusterer.active_tracks,
+            "unknown_tracks": self._visitors.count,
             "active_clip_recorders": len(self._recorders),
             "last_analysis_age_seconds": (
                 round(time.time() - self._last_analysis_at, 2)
@@ -225,6 +243,9 @@ class CameraAnalyzer:
 
     def open_tracks(self) -> List[dict]:
         return self._tracker.snapshot()
+
+    def overlay(self) -> Optional[tuple]:
+        return self._overlay
 
     # -----------------------------
     # Main loop
@@ -280,11 +301,26 @@ class CameraAnalyzer:
         self._frames_analyzed += 1
         self._last_analysis_at = now
 
-        self._ring_buffer.add(timestamp, frame)
-        self._feed_recorders(timestamp, frame)
+        self._feed_recorders(timestamp, self._ring_buffer.add(timestamp, frame))
 
         face_detections = self._process_faces(frame, timestamp)
-        weapon_detections = self._process_weapons(frame, timestamp)
+
+        if self._frames_analyzed % max(1, settings.weapon_every_n_frames) == 0:
+            weapon_detections = self._process_weapons(frame, timestamp)
+            self._last_weapons = (timestamp, weapon_detections)
+        else:
+            weapon_detections = []
+
+        # On frames where the object detector was skipped, keep drawing the
+        # boxes from its last pass so they do not flicker in the live view.
+        last_weapon_time, last_weapons = self._last_weapons
+        shown_weapons = (
+            weapon_detections
+            if weapon_detections or timestamp - last_weapon_time > 1.0
+            else last_weapons
+        )
+
+        self._overlay = (timestamp, face_detections, shown_weapons)
 
         self._record_detections(timestamp, face_detections, weapon_detections)
 
@@ -308,7 +344,7 @@ class CameraAnalyzer:
             # Give unrecognised faces a stable label, otherwise every frame
             # looks like a brand new stranger and no track can ever merge.
             if detection["status"] == "unknown":
-                detection["identity_name"] = self._clusterer.assign(
+                detection["identity_name"] = self._visitors.identify(
                     detection["embedding"],
                     timestamp,
                 )
@@ -351,14 +387,31 @@ class CameraAnalyzer:
         detection: dict,
         timestamp: float,
     ):
+        label = detection["identity_name"]
+
+        # One crop per subject every few seconds is plenty of evidence; one
+        # per analysed frame fills the disk within days.
+        last = self._crop_saved_at.get(label)
+
+        if (
+            last is not None
+            and timestamp - last < settings.face_crop_interval_seconds
+        ):
+            return None, None
+
         crop = _crop(frame, detection["bbox"])
 
         if crop is None:
             return None, None
 
+        if len(self._crop_saved_at) > 512:
+            self._crop_saved_at.clear()
+
+        self._crop_saved_at[label] = timestamp
+
         key = self._artifact_key(
             "face_crops",
-            f"{detection['identity_name']}_{int(timestamp * 1000)}.jpg",
+            f"{label.replace(' ', '_')}_{int(timestamp * 1000)}.jpg",
         )
 
         return self._save_image(key, crop)
@@ -377,10 +430,14 @@ class CameraAnalyzer:
 
         annotated = _draw_boxes(frame, detections)
 
-        annotated_key, annotated_ref = self._save_image(
-            self._artifact_key("annotated", f"{int(timestamp * 1000)}.jpg"),
-            annotated,
-        )
+        last_saved, annotated_key, annotated_ref = self._last_annotated
+
+        if timestamp - last_saved >= settings.annotated_frame_interval_seconds:
+            annotated_key, annotated_ref = self._save_image(
+                self._artifact_key("annotated", f"{int(timestamp * 1000)}.jpg"),
+                annotated,
+            )
+            self._last_annotated = (timestamp, annotated_key, annotated_ref)
 
         published = []
 
@@ -426,6 +483,14 @@ class CameraAnalyzer:
             face_tracks = [t for t in open_tracks if t.get("kind") == "face"]
             scored = fusion_engine.fuse_weapon_event(track, face_tracks)
 
+        appearance = None
+
+        if track.get("kind") == "face" and track.get("status") == "unknown":
+            appearance = self._describe_unknown(track, frame)
+
+            if appearance["text"]:
+                scored["summary"] = f"{scored['summary']} {appearance['text']}"
+
         snapshot_key, _ = self._save_image(
             self._artifact_key(
                 "events",
@@ -449,6 +514,7 @@ class CameraAnalyzer:
                 "best_similarity_score": track.get("best_similarity_score"),
                 "max_confidence": track.get("max_confidence"),
                 "bbox": track.get("bbox"),
+                "appearance": appearance,
             },
             snapshot_key=snapshot_key,
         )
@@ -457,6 +523,9 @@ class CameraAnalyzer:
             return
 
         self._tracker.bind_event_id(track["track_id"], event["event_id"])
+
+        if appearance is not None:
+            self._schedule_appearance(event, snapshot_key)
 
         broadcaster.publish(
             {
@@ -475,6 +544,29 @@ class CameraAnalyzer:
 
         if scored["risk_level"] == "high":
             self._schedule_event_analysis(event)
+
+    def _describe_unknown(self, track: dict, frame: np.ndarray) -> dict:
+        """What can be said about a stranger: clothing colour and history."""
+        label = track.get("identity_name") or "unknown"
+        profile = self._visitors.info(label) or {}
+
+        colour = None
+
+        try:
+            colour = clothing_colour(frame, track.get("bbox"))
+        except Exception as e:
+            logger.debug(f"[{self.camera_id}] Clothing colour failed: {e}")
+
+        visits = int(profile.get("visits", 1))
+        first_seen = profile.get("first_seen")
+
+        return {
+            "label": label,
+            "visits": visits,
+            "first_seen": iso_utc(_utc(first_seen)) if first_seen else None,
+            "clothing_colour": colour,
+            "text": describe_unknown(label, visits, first_seen, colour),
+        }
 
     def _handle_closed_track(self, track: dict) -> None:
         event_id = track.get("event_id")
@@ -514,7 +606,7 @@ class CameraAnalyzer:
                         "risk_level": event.risk_level,
                         "detection_count": event.detection_count,
                         "duration_seconds": payload["duration_seconds"],
-                        "ended_at": event.ended_at.isoformat(),
+                        "ended_at": iso_utc(event.ended_at),
                     },
                 }
             )
@@ -565,9 +657,10 @@ class CameraAnalyzer:
                 "event_type": event_type,
                 "risk_level": risk_level,
                 "status": "open",
-                "started_at": _utc(started_at).isoformat(),
+                "started_at": iso_utc(_utc(started_at)),
                 "summary": summary,
                 "snapshot_key": snapshot_key,
+                "snapshot_url": self._storage.public_url(snapshot_key),
                 "payload": payload,
             }
 
@@ -583,16 +676,27 @@ class CameraAnalyzer:
         cooldown_key = event["event_type"]
         now = time.time()
 
-        last = self._alert_cooldowns.get(cooldown_key)
+        # Scene-check alerts arrive from the Qwen executor, so the cooldown
+        # table is shared between threads.
+        with self._alert_lock:
+            last = self._alert_cooldowns.get(cooldown_key)
 
-        # A stranger loitering would otherwise generate an alert every few
-        # seconds; the event history still records every occurrence.
-        if last is not None and now - last < settings.alert_cooldown_seconds:
-            return
+            # A stranger loitering would otherwise generate an alert every few
+            # seconds; the event history still records every occurrence.
+            if last is not None and now - last < settings.alert_cooldown_seconds:
+                return
 
-        self._alert_cooldowns[cooldown_key] = now
+            self._alert_cooldowns[cooldown_key] = now
 
         alert = fusion_engine.build_alert(event)
+
+        created_at = datetime.utcnow()
+
+        # Clients sort and age alerts by these, so the pushed copy must carry
+        # the same fields the REST listing does.
+        alert["created_at"] = iso_utc(created_at)
+        alert["acknowledged"] = False
+        alert["snapshot_url"] = event.get("snapshot_url")
 
         db = SessionLocal()
 
@@ -605,6 +709,7 @@ class CameraAnalyzer:
                 title=alert["title"],
                 message=alert["message"],
                 recommended_action=alert["recommended_action"],
+                created_at=created_at,
             )
 
             db.add(row)
@@ -645,7 +750,7 @@ class CameraAnalyzer:
         recorder = ClipRecorder(
             event_id=event_id,
             camera_id=self.camera_id,
-            storage_key=self._artifact_key("clips", f"{event_id}.mp4"),
+            storage_key=self._artifact_key("clips", f"{event_id}.webm"),
             pre_roll=self._ring_buffer.snapshot(),
             started_at=timestamp,
             post_seconds=settings.clip_post_seconds,
@@ -681,6 +786,7 @@ class CameraAnalyzer:
                     "camera_id": self.camera_id,
                     "event_id": event_id,
                     "clip_key": clip_key,
+                    "clip_url": self._storage.public_url(clip_key),
                 }
             )
 
@@ -858,6 +964,66 @@ class CameraAnalyzer:
             }
         )
 
+    def _schedule_appearance(self, event: dict, snapshot_key: Optional[str]) -> None:
+        """Asks the vision model for a fuller description, when one is set up."""
+        if not self._qwen_enabled() or not snapshot_key:
+            return
+
+        image_ref = self._storage.access_reference(snapshot_key)
+
+        if image_ref:
+            self._submit_qwen(self._run_appearance, event, image_ref)
+
+    def _run_appearance(self, event: dict, image_ref: str) -> None:
+        with self._qwen_semaphore:
+            try:
+                result = self._qwen.analyze_image(image_ref, APPEARANCE_PROMPT)
+            except Exception as e:
+                logger.warning(f"[{self.camera_id}] Appearance analysis failed: {e}")
+                return
+
+        description = (result or {}).get("description")
+
+        if not description or not isinstance(description, str):
+            return
+
+        db = SessionLocal()
+
+        try:
+            row = db.query(Event).filter(Event.id == event["event_id"]).first()
+
+            if row is None:
+                return
+
+            payload = dict(row.payload or {})
+            appearance = dict(payload.get("appearance") or {})
+            appearance["description"] = description.strip()
+            payload["appearance"] = appearance
+            row.payload = payload
+            row.summary = f"{row.summary}\n\n{description.strip()}"
+
+            db.commit()
+
+            summary = row.summary
+
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"[{self.camera_id}] Failed to store appearance: {e}")
+            return
+
+        finally:
+            db.close()
+
+        broadcaster.publish(
+            {
+                "type": "event.analysis",
+                "camera_id": self.camera_id,
+                "event_id": event["event_id"],
+                "analysis": {"appearance": description.strip()},
+                "summary": summary,
+            }
+        )
+
     def _schedule_alert_enrichment(self, alert: dict, event: dict) -> None:
         if not self._qwen_enabled():
             return
@@ -934,7 +1100,7 @@ class CameraAnalyzer:
         record = {
             "camera_id": self.camera_id,
             "timestamp": timestamp,
-            "observed_at": _utc(timestamp).isoformat(),
+            "observed_at": iso_utc(_utc(timestamp)),
             "faces": faces,
             "weapons": weapons,
         }

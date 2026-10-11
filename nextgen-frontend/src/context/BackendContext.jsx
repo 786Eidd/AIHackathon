@@ -1,7 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api, wsUrl } from "../lib/api";
 
-const DEFAULT_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// On the appliance the backend serves this dashboard, so the API is simply
+// the page's own origin. Under the Vite dev server it is port 8000 on the
+// same host, which also keeps a phone on the LAN pointed at the right place.
+const DEV_PORTS = ["5173", "4173"];
+const DEFAULT_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  (DEV_PORTS.includes(window.location.port)
+    ? `${window.location.protocol}//${window.location.hostname || "localhost"}:8000`
+    : window.location.origin);
+
+// Detection chips disappear this long after the last sighting.
+const DETECTION_TTL_MS = 4000;
 const BackendContext = createContext(null);
 
 export function BackendProvider({ children }) {
@@ -13,7 +24,6 @@ export function BackendProvider({ children }) {
   const [alerts, setAlerts] = useState({});
   const [events, setEvents] = useState([]);
   const [identities, setIdentities] = useState([]);
-  const [armed, setArmed] = useState(false);
   const [toasts, setToasts] = useState([]);
   const wsRef = useRef(null);
   const retryRef = useRef(null);
@@ -33,10 +43,12 @@ export function BackendProvider({ children }) {
   const refreshCameras = useCallback(async () => {
     try {
       const data = await api.listCameras(baseUrl);
+      // Rebuilt from the response so cameras deleted elsewhere disappear;
+      // only the polled pipeline telemetry is carried over.
       setCameras((prev) => {
-        const next = { ...prev };
+        const next = {};
         (data.cameras || []).forEach((c) => {
-          next[c.camera_id] = { ...(next[c.camera_id] || {}), ...c };
+          next[c.camera_id] = { ...c, pipeline: prev[c.camera_id]?.pipeline };
         });
         return next;
       });
@@ -90,6 +102,24 @@ export function BackendProvider({ children }) {
     pushToast("Identities reloaded", `${data.identity_count ?? (data.identities || []).length} identities loaded.`, "medium");
     return data;
   }, [baseUrl, pushToast]);
+
+  const enrollIdentity = useCallback(
+    async (name, images) => {
+      const data = await api.enrollIdentity(baseUrl, name, images);
+      setIdentities(data.identities || []);
+      return data;
+    },
+    [baseUrl]
+  );
+
+  const deleteIdentity = useCallback(
+    async (name) => {
+      const data = await api.deleteIdentity(baseUrl, name);
+      setIdentities(data.identities || []);
+      return data;
+    },
+    [baseUrl]
+  );
 
   const createCamera = useCallback(
     async (body) => {
@@ -147,6 +177,17 @@ export function BackendProvider({ children }) {
     [baseUrl]
   );
 
+  const raisePanic = useCallback(
+    async (note) => {
+      const data = await api.panic(baseUrl, note);
+      // Shown at once here; other dashboards get it over the WebSocket.
+      setAlerts((prev) => ({ ...prev, [data.alert.alert_id]: data.alert }));
+      refreshCameras();
+      return data;
+    },
+    [baseUrl, refreshCameras]
+  );
+
   const sendChat = useCallback(
     async (question, cameraId, minutes) => {
       return api.chat(baseUrl, { question, camera_id: cameraId || null, minutes: minutes || 60 });
@@ -154,9 +195,11 @@ export function BackendProvider({ children }) {
     [baseUrl]
   );
 
+  // Armed reflects the backend: a camera is "enabled" until it is stopped.
+  const armed = Object.values(cameras).some((c) => c.enabled);
+
   const toggleArm = useCallback(async () => {
     const next = !armed;
-    setArmed(next);
     const ids = Object.keys(cameras);
     for (const id of ids) {
       try {
@@ -192,6 +235,10 @@ export function BackendProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
 
+    function patchEvent(eventId, changes) {
+      setEvents((prev) => prev.map((e) => (e.event_id === eventId ? { ...e, ...changes } : e)));
+    }
+
     function handleMessage(msg) {
       switch (msg.type) {
         case "snapshot":
@@ -215,14 +262,30 @@ export function BackendProvider({ children }) {
         case "detection":
           setDetections((prev) => ({
             ...prev,
-            [msg.camera_id]: { faces: msg.faces || [], weapons: msg.weapons || [], at: msg.observed_at },
+            [msg.camera_id]: { faces: msg.faces || [], weapons: msg.weapons || [], at: msg.observed_at, receivedAt: Date.now() },
           }));
           break;
         case "camera.status":
-          setCameras((prev) => (prev[msg.camera_id] ? { ...prev, [msg.camera_id]: { ...prev[msg.camera_id], ...msg } } : prev));
+          setCameras((prev) =>
+            prev[msg.camera_id]
+              ? { ...prev, [msg.camera_id]: { ...prev[msg.camera_id], status: msg.status, last_error: msg.error } }
+              : prev
+          );
           break;
         case "event.opened":
           setEvents((prev) => [{ ...msg.event, camera_id: msg.camera_id }, ...prev].slice(0, 200));
+          break;
+        case "event.closed":
+          patchEvent(msg.event.event_id, { ...msg.event, status: "closed" });
+          break;
+        case "event.clip_ready":
+          patchEvent(msg.event_id, { clip_key: msg.clip_key, clip_url: msg.clip_url });
+          break;
+        case "event.analysis":
+          patchEvent(msg.event_id, { summary: msg.summary });
+          break;
+        case "alert.updated":
+          setAlerts((prev) => (prev[msg.alert_id] ? { ...prev, [msg.alert_id]: { ...prev[msg.alert_id], message: msg.message } } : prev));
           break;
         case "alert": {
           setAlerts((prev) => ({ ...prev, [msg.alert.alert_id]: msg.alert }));
@@ -285,6 +348,22 @@ export function BackendProvider({ children }) {
     };
   }, [baseUrl, pushToast]);
 
+  // Drop detection chips once the subject has not been seen for a moment;
+  // the backend only publishes frames that contain something.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const cutoff = Date.now() - DETECTION_TTL_MS;
+      setDetections((prev) => {
+        const stale = Object.keys(prev).filter((id) => (prev[id].receivedAt || 0) < cutoff);
+        if (!stale.length) return prev;
+        const next = { ...prev };
+        stale.forEach((id) => delete next[id]);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Initial + periodic REST refresh.
   useEffect(() => {
     connect();
@@ -318,11 +397,14 @@ export function BackendProvider({ children }) {
     refreshEvents,
     refreshIdentities,
     reloadIdentities,
+    enrollIdentity,
+    deleteIdentity,
     createCamera,
     updateCamera,
     deleteCamera,
     cameraAction,
     ackAlert,
+    raisePanic,
     sendChat,
     toggleArm,
     toasts,

@@ -25,20 +25,21 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen bg-white">
-      <div className="relative w-[45%] min-w-[500px] bg-[#e1e1e1] hidden md:block">
+      <div className="relative w-[45%] min-w-[500px] bg-[#e1e1e1] hidden lg:block">
         <img src={loginHero} alt="Security cameras" className="absolute inset-0 h-full w-full object-cover" />
         <img
           src={loginLogo}
           alt="NexGen Security & Management"
-          className="absolute top-[58px] left-1/2 -translate-x-1/2 w-[350px]"
+          className="absolute top-[40px] left-1/2 -translate-x-1/2 w-[320px] bg-white/85 rounded-[10px] px-5 py-3"
         />
         <div className="absolute bottom-0 left-0 right-0 h-[44px] bg-white/50 flex items-center justify-center">
           <p className="text-brand-navy text-[13px] font-semibold">Copyright © 2026 NexGen. All Rights Reserved</p>
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-8">
+      <div className="flex-1 flex items-center justify-center px-5 sm:px-8 py-8">
         <form onSubmit={handleSubmit} className="w-full max-w-[522px] flex flex-col gap-10">
+          <img src={loginLogo} alt="NexGen Security & Management" className="h-[56px] w-auto self-start lg:hidden" />
           <div>
             <h1 className="text-brand-navy text-[30px] font-bold">Login</h1>
             <p className="text-brand-gray text-[18px]">Enter your information below</p>

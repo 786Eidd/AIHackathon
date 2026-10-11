@@ -13,8 +13,8 @@ export default function OnboardingSidebar({ currentStep, showBack = true }) {
   const navigate = useNavigate();
 
   return (
-    <div className="relative w-[45%] min-w-[500px] bg-[#f5f5f5] hidden md:flex flex-col justify-between overflow-hidden">
-      <img src={loginHero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-[0.06]" />
+    <div className="relative w-[45%] min-w-[500px] bg-[#f5f5f5] hidden lg:flex flex-col justify-between overflow-hidden">
+      <img src={loginHero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-[0.10]" />
 
       <div className="relative flex flex-col items-center pt-[70px]">
         <img src={onboarding.logo} alt="NextGen" className="w-[350px]" />

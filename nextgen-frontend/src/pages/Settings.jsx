@@ -1,5 +1,6 @@
 import { useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import EmergencyContacts from "../components/EmergencyContacts";
 import { useBackend } from "../context/BackendContext";
 
 export default function Settings() {
@@ -21,7 +22,7 @@ export default function Settings() {
 
   return (
     <DashboardLayout title="Setting">
-      <div className="flex items-center gap-[73px] border-b border-[#e4e4e4] pb-2.5 mb-6">
+      <div className="flex items-center gap-6 sm:gap-[73px] border-b border-[#e4e4e4] pb-2.5 mb-6">
         <button
           type="button"
           onClick={() => setTab("general")}
@@ -44,6 +45,12 @@ export default function Settings() {
 
       {tab === "general" ? (
         <div className="flex flex-col gap-6">
+          <div className="border border-[#d9d9d9] rounded-[5px] p-4 sm:p-6">
+            <p className="text-brand-navy text-[16px] font-medium mb-3">Emergency contacts</p>
+            <div className="border-t border-[#e4e4e4] mb-4" />
+            <EmergencyContacts />
+          </div>
+
           <div className="border border-[#d9d9d9] rounded-[5px] p-6">
             <p className="text-brand-navy text-[16px] font-medium mb-3">Permissions</p>
             <div className="border-t border-[#e4e4e4] mb-4" />
